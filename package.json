@@ -1,0 +1,12 @@
+{
+  "name": "daily-college-quiz-system",
+  "version": "1.0.0",
+  "description": "Daily Class Quiz System for College CS Courses",
+  "scripts": {
+    "start": "node server.js",
+    "serve": "node server.js"
+  },
+  "keywords": ["quiz", "college", "supabase", "education"],
+  "author": "",
+  "license": "ISC"
+}

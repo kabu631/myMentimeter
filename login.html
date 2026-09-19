@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login | Daily College Quiz System</title>
+  <meta name="description" content="Sign in to your college daily quiz account. Access daily lecture quizzes, track your semester attendance, and view scores.">
+
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/auth.css">
+
+  <!-- Supabase Official JS SDK from CDN (Safe for static GitHub Pages) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <!-- Header / Navigation -->
+  <header class="app-navbar">
+    <div class="app-container navbar-inner">
+      <div class="navbar-brand">
+        <div class="brand-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+          </svg>
+        </div>
+        <span>DailyClassQuiz</span>
+      </div>
+      <div class="navbar-nav">
+        <a href="register.html" class="nav-link">Student Register</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="auth-wrapper">
+      <div class="auth-card">
+        
+        <div class="auth-header">
+          <div class="auth-logo">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+              <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+            </svg>
+          </div>
+          <div style="font-size: 0.78rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.35rem;">
+            Department of Computer Science &bull; CS-301
+          </div>
+          <h1 class="auth-title">College Quiz Portal</h1>
+          <p class="auth-subtitle">Student &amp; Faculty Access</p>
+        </div>
+
+        <!-- Alert Notification Box -->
+        <div id="login-alert" class="alert alert-danger" style="display: none;" role="alert"></div>
+
+        <div class="alert alert-info" style="font-size: 0.82rem; margin-bottom: 1.25rem; display: flex; align-items: flex-start; gap: 0.5rem; text-align: left; line-height: 1.45;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          <span>Faculty accounts are automatically recognized and routed to the <strong>Teacher Command Center</strong> to manage questions and evaluate gradebooks.</span>
+        </div>
+
+        <!-- Login Form -->
+        <form id="form-login" novalidate>
+          <div class="form-group">
+            <label class="form-label" for="login-email">College Email Address</label>
+            <input 
+              type="email" 
+              id="login-email" 
+              class="form-control" 
+              placeholder="e.g. your.email@college.edu" 
+              required 
+              autocomplete="email"
+            >
+          </div>
+
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <label class="form-label" for="login-password">Password</label>
+              <button type="button" id="toggle-password-btn" style="background: none; border: none; color: var(--primary); font-size: 0.8rem; cursor: pointer; padding: 0;">
+                Show
+              </button>
+            </div>
+            <input 
+              type="password" 
+              id="login-password" 
+              class="form-control" 
+              placeholder="••••••••" 
+              required 
+              autocomplete="current-password"
+            >
+          </div>
+
+          <button type="submit" id="btn-submit-login" class="btn btn-primary btn-block btn-lg" style="margin-top: 1.5rem;">
+            <span>Sign In &rarr;</span>
+          </button>
+        </form>
+
+        <div class="auth-divider">New Student?</div>
+
+        <div style="text-align: center;">
+          <a href="register.html" class="btn btn-secondary btn-block">
+            Register New Student Account
+          </a>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <footer class="app-footer">
+    <div class="app-container footer-inner">
+      <div>Daily Quiz System &copy; 2026. Department of Computer Science.</div>
+      <div>Academic Evaluation Portal</div>
+    </div>
+  </footer>
+
+  <script type="module">
+    import { loginUser, getUserProfile } from './js/auth.js';
+    import { showToast } from './js/supabase.js';
+
+    // If user is already logged in, redirect automatically based on role
+    async function checkExistingSession() {
+      const profile = await getUserProfile();
+      if (profile) {
+        const isAdmin = (profile.role === 'admin' || profile.role === 'teacher');
+        window.location.href = isAdmin ? 'admin/index.html' : 'dashboard.html';
+      }
+    }
+    checkExistingSession();
+
+    // Password visibility toggle
+    const passwordInput = document.getElementById('login-password');
+    const toggleBtn = document.getElementById('toggle-password-btn');
+    toggleBtn.addEventListener('click', () => {
+      const isPassword = passwordInput.type === 'password';
+      passwordInput.type = isPassword ? 'text' : 'password';
+      toggleBtn.textContent = isPassword ? 'Hide' : 'Show';
+    });
+
+    // Form submission
+    const form = document.getElementById('form-login');
+    const alertBox = document.getElementById('login-alert');
+    const submitBtn = document.getElementById('btn-submit-login');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      alertBox.style.display = 'none';
+
+      const email = document.getElementById('login-email').value;
+      const password = document.getElementById('login-password').value;
+
+      // Loading state
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span>Verifying Credentials...</span>';
+
+      const result = await loginUser(email, password);
+
+      if (!result.success) {
+        alertBox.textContent = result.error;
+        alertBox.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>Sign In &rarr;</span>';
+      } else {
+        const roleGreeting = result.isAdmin ? 'Welcome, Faculty / Admin!' : 'Signed in successfully!';
+        showToast(roleGreeting, 'success');
+
+        setTimeout(() => {
+          window.location.href = result.redirectUrl || 'dashboard.html';
+        }, 500);
+      }
+    });
+  </script>
+</body>
+</html>

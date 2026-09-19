@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Semester Quiz History | Daily College Quiz System</title>
+  <meta name="description" content="Complete semester history for all 35 class quizzes. View individual scores, dates, cumulative total marks, and percentage.">
+
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/components.css">
+
+  <!-- Supabase JS CDN (Official v2) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <!-- Header / Navigation -->
+  <header class="app-navbar">
+    <div class="app-container navbar-inner">
+      <a href="index.html" class="navbar-brand">
+        <div class="brand-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg></div>
+        <span>DailyClassQuiz</span>
+      </a>
+      <nav class="navbar-nav">
+        <a href="dashboard.html" class="nav-link">Dashboard</a>
+        <a href="results.html" class="nav-link active">Results</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="app-container">
+
+      <!-- Header Section -->
+      <section style="margin-bottom: 2rem;">
+        <h1 style="font-size: 2.2rem; margin-bottom: 0.35rem;">Semester Quiz History</h1>
+        <p style="margin: 0; color: var(--text-muted);">
+          Complete record of all daily lecture quizzes across the semester.
+        </p>
+      </section>
+
+      <!-- Semester Progress Bar & Stats -->
+      <section style="margin-bottom: 2.5rem;">
+        <div class="card-header" style="border: none; padding: 0; margin-bottom: 0.75rem;">
+          <h2 class="card-title">Cumulative Progress</h2>
+          <span id="hist-progress-label" style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;"></span>
+        </div>
+
+        <div class="progress-container" style="margin-bottom: 1.5rem; height: 10px;">
+          <div id="hist-progress-fill" class="progress-fill" style="width: 0%;"></div>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path></svg></div>
+            <div class="stat-content">
+              <div id="hist-cumulative-score" class="stat-value">0.0 / 0.0</div>
+              <div class="stat-label">Total Points Earned</div>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></div>
+            <div class="stat-content">
+              <div id="hist-completed-count" class="stat-value">0 / 35</div>
+              <div class="stat-label">Classes Attended / Quizzed</div>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg></div>
+            <div class="stat-content">
+              <div id="hist-average-pct" class="stat-value">0.0%</div>
+              <div class="stat-label">Cumulative Average</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- History Table & Filter -->
+      <section>
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem;">
+          <h2 class="card-title" style="margin: 0;">All Class Quizzes (1–35)</h2>
+          <div style="width: 100%; max-width: 300px;">
+            <input type="text" id="history-search-input" class="form-control" placeholder="Search by topic or class #...">
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Class</th>
+                <th>Topic / Lecture Title</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Your Score</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-body">
+              <tr>
+                <td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                  Loading complete quiz history...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="app-footer">
+    <div class="app-container footer-inner">
+      <div>Daily Quiz System &copy; 2026. Department of Computer Science.</div>
+      <div>Academic Evaluation Portal</div>
+    </div>
+  </footer>
+
+  <script type="module" src="js/history.js"></script>
+</body>
+</html>

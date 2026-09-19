@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quiz Creator &amp; Question Builder | Faculty Console</title>
+  <meta name="description" content="Instructor quiz editor to build daily class questions, set options A-D, designate correct answers, and configure schedules.">
+
+  <link rel="stylesheet" href="../css/main.css">
+  <link rel="stylesheet" href="../css/components.css">
+  <link rel="stylesheet" href="../css/admin.css">
+
+  <!-- Supabase Official JS SDK from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <!-- Header / Navigation -->
+  <header class="app-navbar">
+    <div class="app-container navbar-inner">
+      <a href="index.html" class="navbar-brand">
+        <div class="brand-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+          </svg>
+        </div>
+        <span>InstructorConsole</span>
+      </a>
+      <nav class="navbar-nav">
+        <!-- Dynamically injected -->
+      </nav>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="app-container builder-container">
+
+      <!-- Academic Course Context Bar -->
+      <div style="margin-bottom: 1.25rem;">
+        <div class="academic-subline">
+          Department of Computer Science &bull; CS-301: Database Management Systems
+        </div>
+      </div>
+
+      <!-- Breadcrumb & Title -->
+      <div style="margin-bottom: 1.5rem;">
+        <a href="quizzes.html" style="font-size: 0.9rem; font-weight: 600; color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.35rem; margin-bottom: 0.5rem;">
+          &larr; Back to Quizzes List
+        </a>
+        <h1 id="page-heading" style="font-size: 2.2rem; margin-bottom: 0.25rem;">Create Daily Quiz</h1>
+        <p style="margin: 0; color: var(--text-muted);">
+          Configure quiz metadata and dynamic multiple choice questions.
+        </p>
+      </div>
+
+      <!-- Warning Banner if Attempts Exist -->
+      <div id="locked-warning" class="alert alert-warning" style="display: none; margin-bottom: 1.5rem; align-items: center;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span><strong>Questions Locked:</strong> Students have already submitted <span id="locked-attempt-count">0</span> attempt(s) for this quiz. Question content, choices, and marks are locked to preserve student grade records. You can still update title, description, scheduled date, and status.</span>
+      </div>
+
+      <!-- 1. QUIZ METADATA FORM -->
+      <div class="card" style="margin-bottom: 2rem;">
+        <h2 class="card-title" style="margin-bottom: 1.25rem;">1. Quiz Details &amp; Schedule</h2>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="field-class-number">Class / Session Number (1–35) *</label>
+            <input type="number" id="field-class-number" class="form-control" min="1" max="35" placeholder="e.g. 11" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="field-date">Scheduled Date *</label>
+            <input type="date" id="field-date" class="form-control" required>
+            <span class="input-hint">Quizzes must be scheduled for today or an upcoming date.</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="field-time-limit">Time Limit (Minutes)</label>
+            <input type="number" id="field-time-limit" class="form-control" min="1" max="120" placeholder="e.g. 10 (or blank if untimed)">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="field-title">Quiz Title *</label>
+            <input type="text" id="field-title" class="form-control" placeholder="e.g. Class 11 — Database Normalization" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="field-topic">Lecture Topic *</label>
+            <input type="text" id="field-topic" class="form-control" placeholder="e.g. 1NF, 2NF, 3NF, BCNF" required>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="field-start-time">Optional Start Time</label>
+            <input type="time" id="field-start-time" class="form-control">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="field-end-time">Optional End Time</label>
+            <input type="time" id="field-end-time" class="form-control">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="field-description">Description / Instructions</label>
+          <textarea id="field-description" class="form-textarea" rows="2" placeholder="Brief summary of lecture concepts tested..."></textarea>
+        </div>
+
+        <div style="display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem;">
+            <input type="checkbox" id="field-show-score" checked style="accent-color: var(--primary); width: 18px; height: 18px;">
+            <span>Show score immediately to student after submission</span>
+          </label>
+
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem;">
+            <input type="checkbox" id="field-show-answers" style="accent-color: var(--primary); width: 18px; height: 18px;">
+            <span>Show correct answer breakdown to student after submission</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- 2. QUESTIONS BUILDER LIST -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+        <div>
+          <h2 class="card-title" style="margin: 0;">2. Multiple-Choice Questions</h2>
+          <span style="font-size: 0.85rem; color: var(--text-muted);">Four options per question with one designated correct answer</span>
+        </div>
+        <button type="button" id="btn-add-q" class="btn btn-secondary btn-sm">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Add Question
+        </button>
+      </div>
+
+      <div id="questions-list-container">
+        <!-- Injected dynamically -->
+      </div>
+
+      <!-- 3. STICKY ACTIONS BAR -->
+      <div class="builder-actions-bottom">
+        <div>
+          <a href="quizzes.html" class="btn btn-outline">Cancel</a>
+        </div>
+        <div style="display: flex; gap: 0.75rem;">
+          <button type="button" id="btn-save-draft" class="btn btn-secondary">Save as Draft</button>
+          <button type="button" id="btn-save-publish" class="btn btn-primary">Publish Quiz Immediately &rarr;</button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <footer class="app-footer">
+    <div class="app-container footer-inner">
+      <div>Daily Quiz System &copy; 2026. Faculty Administration Console.</div>
+      <div>Academic Evaluation Portal</div>
+    </div>
+  </footer>
+
+  <script type="module">
+    import { guardAdminPage } from '../js/admin-service.js';
+    import { getSupabase, showToast } from '../js/supabase.js';
+
+    let currentAdmin = null;
+    let editingQuizId = null;
+    let hasAttempts = false;
+    let questions = [];
+
+    async function initCreateQuiz() {
+      currentAdmin = await guardAdminPage();
+      if (!currentAdmin) return;
+
+      const urlParams = new URLSearchParams(window.location.search);
+      editingQuizId = urlParams.get('id');
+
+      // Set minimum date to today in local timezone
+      const now = new Date();
+      const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const dateInput = document.getElementById('field-date');
+      dateInput.min = localToday;
+      dateInput.value = localToday;
+
+      if (editingQuizId) {
+        document.getElementById('page-heading').textContent = 'Edit Daily Quiz';
+        await loadQuizForEditing(editingQuizId);
+      } else {
+        addBlankQuestion();
+        renderQuestions();
+      }
+
+      setupEvents();
+    }
+
+    async function loadQuizForEditing(quizId) {
+      const supabase = getSupabase();
+      if (!supabase) return;
+
+      try {
+        const { data: quiz, error: qErr } = await supabase.from('quizzes').select('*').eq('id', quizId).single();
+        if (qErr || !quiz) throw new Error('Quiz not found.');
+
+        document.getElementById('field-class-number').value = quiz.class_number;
+        document.getElementById('field-title').value = quiz.title;
+        document.getElementById('field-topic').value = quiz.topic || quiz.title;
+        document.getElementById('field-date').value = quiz.scheduled_date;
+        document.getElementById('field-time-limit').value = quiz.time_limit_minutes || '';
+        document.getElementById('field-start-time').value = quiz.start_time || '';
+        document.getElementById('field-end-time').value = quiz.end_time || '';
+        document.getElementById('field-description').value = quiz.description || '';
+        document.getElementById('field-show-score').checked = quiz.show_score_immediately;
+        document.getElementById('field-show-answers').checked = quiz.show_correct_answers;
+
+        // Check for student attempts
+        const { count: aCount } = await supabase.from('quiz_attempts').select('*', { count: 'exact', head: true }).eq('quiz_id', quizId);
+        if (aCount && aCount > 0) {
+          hasAttempts = true;
+          document.getElementById('locked-warning').style.display = 'block';
+          document.getElementById('locked-attempt-count').textContent = aCount;
+          document.getElementById('btn-add-q').disabled = true;
+        }
+
+        // Fetch questions (admin has full access via RLS)
+        const { data: qData } = await supabase.from('questions').select('*').eq('quiz_id', quizId).order('order_index', { ascending: true });
+        if (qData && qData.length > 0) {
+          questions = qData.map(q => ({
+            id: q.id,
+            text: q.question_text,
+            marks: q.marks,
+            options: q.options || [
+              { id: 'A', text: '' },
+              { id: 'B', text: '' },
+              { id: 'C', text: '' },
+              { id: 'D', text: '' }
+            ],
+            correctOption: q.correct_option || 'A'
+          }));
+        } else {
+          addBlankQuestion();
+        }
+
+        renderQuestions();
+
+      } catch (err) {
+        showToast('Error loading quiz: ' + err.message, 'danger');
+      }
+    }
+
+    function addBlankQuestion() {
+      questions.push({
+        id: null,
+        text: '',
+        marks: 1.0,
+        options: [
+          { id: 'A', text: '' },
+          { id: 'B', text: '' },
+          { id: 'C', text: '' },
+          { id: 'D', text: '' }
+        ],
+        correctOption: 'A'
+      });
+    }
+
+    function renderQuestions() {
+      const container = document.getElementById('questions-list-container');
+      if (!container) return;
+      container.innerHTML = '';
+
+      questions.forEach((q, idx) => {
+        const card = document.createElement('div');
+        card.className = 'question-builder-item';
+
+        card.innerHTML = `
+          <div class="question-builder-header">
+            <div class="question-drag-title">
+              <span>Question ${idx + 1}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <div style="display: flex; align-items: center; gap: 0.35rem;">
+                <label style="font-size: 0.85rem; color: var(--text-muted);">Points:</label>
+                <input type="number" step="0.5" min="0.5" class="form-control q-marks" style="width: 80px; padding: 0.35rem 0.6rem;" value="${q.marks}" ${hasAttempts ? 'disabled' : ''}>
+              </div>
+              ${!hasAttempts && questions.length > 1 ? `
+                <button type="button" class="btn btn-outline btn-sm btn-del-q" style="color: var(--danger); border-color: var(--danger-border);">Delete</button>
+              ` : ''}
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Question Text *</label>
+            <textarea class="form-textarea q-prompt" rows="2" placeholder="Write question prompt..." required ${hasAttempts ? 'disabled' : ''}>${q.text}</textarea>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Four Options (Select radio to designate the correct answer)</label>
+            <div class="options-builder-list">
+              ${q.options.map(opt => `
+                <div class="option-builder-row">
+                  <label class="correct-radio-label">
+                    <input type="radio" name="correct_opt_${idx}" value="${opt.id}" ${q.correctOption === opt.id ? 'checked' : ''} ${hasAttempts ? 'disabled' : ''}>
+                    <span>Option ${opt.id}</span>
+                  </label>
+                  <input type="text" class="form-control opt-input" data-opt-id="${opt.id}" placeholder="Option ${opt.id} text" value="${escapeHtml(opt.text)}" required ${hasAttempts ? 'disabled' : ''}>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+
+        // Input sync
+        card.querySelector('.q-marks').addEventListener('input', (e) => {
+          q.marks = parseFloat(e.target.value) || 1.0;
+        });
+
+        card.querySelector('.q-prompt').addEventListener('input', (e) => {
+          q.text = e.target.value;
+        });
+
+        card.querySelectorAll(`input[name="correct_opt_${idx}"]`).forEach(radio => {
+          radio.addEventListener('change', (e) => {
+            if (e.target.checked) q.correctOption = e.target.value;
+          });
+        });
+
+        card.querySelectorAll('.opt-input').forEach(optIn => {
+          optIn.addEventListener('input', (e) => {
+            const optId = e.target.getAttribute('data-opt-id');
+            const target = q.options.find(o => o.id === optId);
+            if (target) target.text = e.target.value;
+          });
+        });
+
+        const delBtn = card.querySelector('.btn-del-q');
+        if (delBtn) {
+          delBtn.addEventListener('click', () => {
+            questions.splice(idx, 1);
+            renderQuestions();
+          });
+        }
+
+        container.appendChild(card);
+      });
+    }
+
+    function setupEvents() {
+      document.getElementById('btn-add-q').addEventListener('click', () => {
+        addBlankQuestion();
+        renderQuestions();
+      });
+
+      document.getElementById('btn-save-draft').addEventListener('click', () => saveQuizData('draft'));
+      document.getElementById('btn-save-publish').addEventListener('click', () => saveQuizData('published'));
+    }
+
+    async function saveQuizData(status) {
+      const supabase = getSupabase();
+      if (!supabase) return;
+
+      const classNum = parseInt(document.getElementById('field-class-number').value, 10);
+      const title = document.getElementById('field-title').value.trim();
+      const topic = document.getElementById('field-topic').value.trim();
+      const date = document.getElementById('field-date').value;
+      const timeLimitVal = document.getElementById('field-time-limit').value;
+      const startTime = document.getElementById('field-start-time').value || null;
+      const endTime = document.getElementById('field-end-time').value || null;
+      const desc = document.getElementById('field-description').value.trim();
+      const showScore = document.getElementById('field-show-score').checked;
+      const showAnswers = document.getElementById('field-show-answers').checked;
+
+      if (!classNum || classNum < 1 || classNum > 35) {
+        showToast('Please provide a valid Class number between 1 and 35.', 'warning');
+        return;
+      }
+
+      if (!title) {
+        showToast('Please provide a quiz title.', 'warning');
+        return;
+      }
+
+      if (!date) {
+        showToast('Please select a scheduled date.', 'warning');
+        return;
+      }
+
+      const now = new Date();
+      const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      if (!hasAttempts && date < localToday) {
+        showToast('Scheduled date cannot be in the past. Please select today or a future date.', 'warning');
+        document.getElementById('field-date').focus();
+        return;
+      }
+
+      if (!hasAttempts) {
+        if (questions.length === 0) {
+          showToast('Please add at least one question.', 'warning');
+          return;
+        }
+
+        for (let i = 0; i < questions.length; i++) {
+          const q = questions[i];
+          if (!q.text.trim()) {
+            showToast(`Question ${i + 1} prompt cannot be empty.`, 'warning');
+            return;
+          }
+          for (const opt of q.options) {
+            if (!opt.text.trim()) {
+              showToast(`Option ${opt.id} in Question ${i + 1} is empty.`, 'warning');
+              return;
+            }
+          }
+        }
+      }
+
+      const btn = status === 'published' ? document.getElementById('btn-save-publish') : document.getElementById('btn-save-draft');
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+
+      try {
+        let quizId = editingQuizId;
+
+        const payload = {
+          class_number: classNum,
+          title: title,
+          topic: topic || title,
+          description: desc,
+          scheduled_date: date,
+          status: status,
+          time_limit_minutes: timeLimitVal ? parseInt(timeLimitVal, 10) : null,
+          start_time: startTime,
+          end_time: endTime,
+          show_score_immediately: showScore,
+          show_correct_answers: showAnswers,
+          updated_at: new Date().toISOString()
+        };
+
+        if (quizId) {
+          // Update
+          let { error: updErr } = await supabase.from('quizzes').update(payload).eq('id', quizId);
+          if (updErr && updErr.message.includes('topic')) {
+            // Fallback if custom columns not in table yet
+            delete payload.topic;
+            delete payload.start_time;
+            delete payload.end_time;
+            const res = await supabase.from('quizzes').update(payload).eq('id', quizId);
+            if (res.error) throw res.error;
+          } else if (updErr) {
+            throw updErr;
+          }
+        } else {
+          // Insert
+          payload.created_by = currentAdmin.id;
+          let { data: newQ, error: insErr } = await supabase.from('quizzes').insert(payload).select().single();
+          if (insErr && insErr.message.includes('topic')) {
+            delete payload.topic;
+            delete payload.start_time;
+            delete payload.end_time;
+            const res = await supabase.from('quizzes').insert(payload).select().single();
+            if (res.error) throw res.error;
+            quizId = res.data.id;
+          } else if (insErr) {
+            throw insErr;
+          } else {
+            quizId = newQ.id;
+          }
+        }
+
+        // Save questions if not locked
+        if (!hasAttempts) {
+          if (editingQuizId) {
+            await supabase.from('questions').delete().eq('quiz_id', quizId);
+          }
+
+          const qToInsert = questions.map((q, idx) => ({
+            quiz_id: quizId,
+            question_text: q.text.trim(),
+            question_type: 'single_choice',
+            options: q.options.map(o => ({ id: o.id, text: o.text.trim() })),
+            correct_option: q.correctOption,
+            marks: q.marks,
+            order_index: idx + 1
+          }));
+
+          const { error: qErr } = await supabase.from('questions').insert(qToInsert);
+          if (qErr) throw qErr;
+        }
+
+        showToast(`Quiz successfully saved as ${status}!`, 'success');
+        setTimeout(() => {
+          window.location.href = 'quizzes.html';
+        }, 800);
+
+      } catch (err) {
+        console.error('Save error:', err);
+        showToast('Failed to save quiz: ' + err.message, 'danger');
+        btn.disabled = false;
+        btn.textContent = status === 'published' ? 'Publish Quiz Immediately →' : 'Save as Draft';
+      }
+    }
+
+    function escapeHtml(str) {
+      return (str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    document.addEventListener('DOMContentLoaded', initCreateQuiz);
+  </script>
+</body>
+</html>

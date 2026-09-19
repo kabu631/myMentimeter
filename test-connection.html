@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Supabase Client Initialization Test</title>
+  <meta name="description" content="Diagnostics page to test Supabase client initialization, authentication, and database connection.">
+
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/components.css">
+
+  <!-- Supabase Official JS SDK from CDN (Safe for GitHub Pages static hosting) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <header class="app-navbar">
+    <div class="app-container navbar-inner">
+      <div class="navbar-brand">
+        <div class="brand-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+          </svg>
+        </div>
+        <span>DailyClassQuiz</span>
+      </div>
+      <div class="navbar-nav">
+        <span class="badge badge-primary">Configuration Diagnostics</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="app-container" style="max-width: 680px;">
+      
+      <div style="margin-bottom: 2rem;">
+        <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">Supabase Client Test</h1>
+        <p style="color: var(--text-muted); margin: 0;">
+          Testing initialization of the official Supabase JavaScript client using public credentials.
+        </p>
+      </div>
+
+      <!-- Config Summary Card -->
+      <div class="card" style="margin-bottom: 1.5rem;">
+        <div class="card-header">
+          <h2 class="card-title">1. Public Configuration Details</h2>
+          <span class="badge badge-published">Safe for Frontend</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.9rem;">
+          <div>
+            <span style="color: var(--text-muted); font-weight: 600;">Config File Location:</span>
+            <code style="display: block; margin-top: 0.25rem; color: var(--primary); background: #f1f5f9; padding: 0.5rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">js/config.js</code>
+          </div>
+          <div>
+            <span style="color: var(--text-muted); font-weight: 600;">Project URL:</span>
+            <code id="display-url" style="display: block; margin-top: 0.25rem; color: var(--text-primary); background: #f1f5f9; padding: 0.5rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">Loading...</code>
+          </div>
+          <div>
+            <span style="color: var(--text-muted); font-weight: 600;">Public Client Key (Anon):</span>
+            <code id="display-key" style="display: block; margin-top: 0.25rem; color: var(--text-primary); background: #f1f5f9; padding: 0.5rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); word-break: break-all;">Loading...</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Test Output Card -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">2. Client Initialization Status</h2>
+          <button id="btn-retest" class="btn btn-secondary btn-sm">Retest</button>
+        </div>
+
+        <div id="test-status-box" style="padding: 1.5rem; text-align: center;">
+          <div class="empty-icon" style="margin: 0 auto 0.75rem;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <p style="color: var(--text-muted); margin: 0;">Initializing Supabase client...</p>
+        </div>
+      </div>
+
+      <div style="margin-top: 1.5rem; text-align: center;">
+        <a href="login.html" class="btn btn-primary">&rarr; Proceed to Login Portal</a>
+      </div>
+
+    </div>
+  </main>
+
+  <footer class="app-footer">
+    <div class="app-container footer-inner">
+      <div>Daily Quiz System &copy; 2026. Department of Computer Science.</div>
+      <div>System Diagnostic Utility</div>
+    </div>
+  </footer>
+
+  <script type="module">
+    import { APP_CONFIG } from './js/config.js';
+    import { testSupabaseConnection } from './js/supabase.js';
+
+    document.getElementById('display-url').textContent = APP_CONFIG.SUPABASE_URL;
+    document.getElementById('display-key').textContent = APP_CONFIG.SUPABASE_ANON_KEY 
+      ? `${APP_CONFIG.SUPABASE_ANON_KEY.substring(0, 32)}... (Valid Key Provided)` 
+      : 'Not set';
+
+    async function runDiagnostics() {
+      const box = document.getElementById('test-status-box');
+      box.innerHTML = `
+        <div class="empty-icon" style="margin: 0 auto 0.75rem;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+        </div>
+        <p style="color: var(--text-muted); margin: 0;">Connecting to Supabase...</p>
+      `;
+
+      const result = await testSupabaseConnection();
+
+      if (result.success) {
+        box.innerHTML = `
+          <div class="empty-icon" style="margin: 0 auto 0.75rem; color: var(--success); background: #ecfdf5; border-color: #a7f3d0;">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
+          <h3 style="color: var(--success); margin-bottom: 0.5rem;">Client Initialized Successfully</h3>
+          <p style="color: var(--text-secondary); margin-bottom: 1rem;">${result.message}</p>
+          <div style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; font-size: 0.85rem;">
+            <span class="badge badge-published">Auth Endpoint: Connected</span>
+            <span class="badge ${result.dbConnected ? 'badge-published' : 'badge-warning'}">
+              Database Tables: ${result.dbConnected ? 'Ready' : 'Pending SQL Execution'}
+            </span>
+          </div>
+        `;
+      } else {
+        box.innerHTML = `
+          <div class="empty-icon" style="margin: 0 auto 0.75rem; color: var(--danger); background: #fef2f2; border-color: #fecaca;">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+          </div>
+          <h3 style="color: var(--danger); margin-bottom: 0.5rem;">Initialization Failed</h3>
+          <p style="color: var(--text-secondary); margin: 0;">${result.message}</p>
+        `;
+      }
+    }
+    }
+
+    document.getElementById('btn-retest').addEventListener('click', runDiagnostics);
+    runDiagnostics();
+  </script>
+</body>
+</html>
