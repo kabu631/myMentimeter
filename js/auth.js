@@ -284,7 +284,7 @@ export function renderNavbar(profile) {
     : '<span class="badge badge-published">Student</span>';
 
   const dashboardLink = isTeacher ? 'admin/index.html' : 'dashboard.html';
-  const historyLink = isTeacher ? '' : '<a href="history.html" class="nav-link">My History</a>';
+  const historyLink = isTeacher ? '' : '<a href="results.html" class="nav-link">Results</a>';
   const adminLinks = isTeacher ? '<a href="admin/index.html" class="nav-link">Teacher Console</a>' : '';
 
   navContainer.innerHTML = `

@@ -121,22 +121,29 @@ async function initQuizEngine() {
     questions = qList;
 
     // Update Header Metadata
-    document.getElementById('quiz-header-title').textContent = currentQuiz.title;
-    document.getElementById('quiz-subline-title').textContent = currentQuiz.title;
-    document.getElementById('quiz-class-badge').textContent = `Class ${String(currentQuiz.class_number).padStart(2, '0')}`;
-    document.getElementById('btn-top-submit').style.display = 'inline-flex';
+    const headerTitle = document.getElementById('quiz-header-title');
+    if (headerTitle) headerTitle.textContent = currentQuiz.title;
+    const sublineTitle = document.getElementById('quiz-subline-title');
+    if (sublineTitle) sublineTitle.textContent = currentQuiz.title;
+    const classBadge = document.getElementById('quiz-class-badge');
+    if (classBadge) classBadge.textContent = `Class ${String(currentQuiz.class_number).padStart(2, '0')}`;
+    const topSubmit = document.getElementById('btn-top-submit');
+    if (topSubmit) topSubmit.style.display = 'inline-flex';
 
     // Timer setup if configured
+    const timerPill = document.getElementById('quiz-timer-pill');
     if (currentQuiz.time_limit_minutes && currentQuiz.time_limit_minutes > 0) {
       secondsRemaining = currentQuiz.time_limit_minutes * 60;
       startCountdownTimer();
-    } else {
-      document.getElementById('quiz-timer-pill').style.display = 'none';
+    } else if (timerPill) {
+      timerPill.style.display = 'none';
     }
 
     // Reveal the active quiz engine
-    document.getElementById('quiz-loading-state').style.display = 'none';
-    document.getElementById('quiz-active-engine').style.display = 'block';
+    const loadingState = document.getElementById('quiz-loading-state');
+    if (loadingState) loadingState.style.display = 'none';
+    const activeEngine = document.getElementById('quiz-active-engine');
+    if (activeEngine) activeEngine.style.display = 'block';
 
     // Render palette & initial question
     renderNavigatorPalette();
@@ -417,12 +424,15 @@ async function submitQuizToDatabase() {
  * 17. Displays the final score card (e.g. "Score: 8 / 10")
  */
 function showCompletionCard(score, totalMarks, message = null) {
-  document.getElementById('quiz-loading-state').style.display = 'none';
-  document.getElementById('quiz-active-engine').style.display = 'none';
-  document.getElementById('btn-top-submit').style.display = 'none';
+  const loadingState = document.getElementById('quiz-loading-state');
+  if (loadingState) loadingState.style.display = 'none';
+  const activeEngine = document.getElementById('quiz-active-engine');
+  if (activeEngine) activeEngine.style.display = 'none';
+  const topSubmit = document.getElementById('btn-top-submit');
+  if (topSubmit) topSubmit.style.display = 'none';
 
   const completionBox = document.getElementById('quiz-completion-state');
-  completionBox.style.display = 'block';
+  if (completionBox) completionBox.style.display = 'block';
 
   if (currentQuiz) {
     document.getElementById('completion-quiz-title').textContent = currentQuiz.title;
@@ -443,12 +453,19 @@ function showCompletionCard(score, totalMarks, message = null) {
 }
 
 function showErrorState(title, message) {
-  document.getElementById('quiz-loading-state').style.display = 'none';
-  document.getElementById('quiz-active-engine').style.display = 'none';
+  const loadingState = document.getElementById('quiz-loading-state');
+  if (loadingState) loadingState.style.display = 'none';
+  const activeEngine = document.getElementById('quiz-active-engine');
+  if (activeEngine) activeEngine.style.display = 'none';
+  const topSubmit = document.getElementById('btn-top-submit');
+  if (topSubmit) topSubmit.style.display = 'none';
+
   const errBox = document.getElementById('quiz-error-state');
-  document.getElementById('quiz-error-title').textContent = title;
-  document.getElementById('quiz-error-message').textContent = message;
-  errBox.style.display = 'block';
+  const errTitle = document.getElementById('quiz-error-title');
+  if (errTitle) errTitle.textContent = title;
+  const errMsg = document.getElementById('quiz-error-message');
+  if (errMsg) errMsg.textContent = message;
+  if (errBox) errBox.style.display = 'block';
 }
 
 function escapeHtml(str) {
