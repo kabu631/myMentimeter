@@ -87,6 +87,11 @@
               required 
               autocomplete="current-password"
             >
+            <div style="display: flex; justify-content: flex-end; margin-top: 0.4rem;">
+              <button type="button" id="btn-open-forgot" style="background: none; border: none; color: var(--primary); font-size: 0.8rem; cursor: pointer; padding: 0; text-decoration: underline;">
+                Forgot Password?
+              </button>
+            </div>
           </div>
 
           <button type="submit" id="btn-submit-login" class="btn btn-primary btn-block btn-lg" style="margin-top: 1.5rem;">
@@ -106,6 +111,39 @@
     </div>
   </main>
 
+  <!-- Forgot Password Modal -->
+  <div id="modal-forgot" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center; padding: 1rem;">
+    <div class="modal-card" style="background: #ffffff; border-radius: var(--radius-lg, 12px); border: 1px solid var(--border-color, #e2e8f0); max-width: 440px; width: 100%; padding: 1.75rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+        <div>
+          <h3 style="font-size: 1.15rem; font-weight: 700; color: #0f172a; margin: 0 0 0.25rem 0;">Reset Password</h3>
+          <p style="font-size: 0.85rem; color: #64748b; margin: 0;">Enter your college email address to receive a secure password recovery link.</p>
+        </div>
+        <button type="button" id="btn-close-forgot" style="background: none; border: none; color: #94a3b8; font-size: 1.5rem; line-height: 1; cursor: pointer; padding: 0;" aria-label="Close">&times;</button>
+      </div>
+
+      <div id="forgot-alert" class="alert" style="display: none; font-size: 0.85rem; margin-bottom: 1rem;"></div>
+
+      <form id="form-forgot">
+        <div class="form-group" style="margin-bottom: 1.25rem;">
+          <label class="form-label" for="forgot-email">College Email Address</label>
+          <input 
+            type="email" 
+            id="forgot-email" 
+            class="form-control" 
+            placeholder="e.g. your.email@college.edu" 
+            required 
+            autocomplete="email"
+          >
+        </div>
+        <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+          <button type="button" id="btn-cancel-forgot" class="btn btn-outline">Cancel</button>
+          <button type="submit" id="btn-submit-forgot" class="btn btn-primary">Send Reset Link</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <footer class="app-footer">
     <div class="app-container footer-inner">
       <div>Daily Quiz System &copy; 2026. Department of Computer Science.</div>
@@ -114,7 +152,7 @@
   </footer>
 
   <script type="module">
-    import { loginUser, getUserProfile } from './js/auth.js';
+    import { loginUser, getUserProfile, sendPasswordResetEmail } from './js/auth.js';
     import { showToast } from './js/supabase.js';
 
     // If user is already logged in, redirect automatically based on role
@@ -134,6 +172,64 @@
       const isPassword = passwordInput.type === 'password';
       passwordInput.type = isPassword ? 'text' : 'password';
       toggleBtn.textContent = isPassword ? 'Hide' : 'Show';
+    });
+
+    // Forgot Password Modal
+    const modalForgot = document.getElementById('modal-forgot');
+    const btnOpenForgot = document.getElementById('btn-open-forgot');
+    const btnCloseForgot = document.getElementById('btn-close-forgot');
+    const btnCancelForgot = document.getElementById('btn-cancel-forgot');
+    const formForgot = document.getElementById('form-forgot');
+    const forgotAlert = document.getElementById('forgot-alert');
+    const btnSubmitForgot = document.getElementById('btn-submit-forgot');
+
+    const openForgotModal = () => {
+      forgotAlert.style.display = 'none';
+      const currentEmail = document.getElementById('login-email').value;
+      if (currentEmail) {
+        document.getElementById('forgot-email').value = currentEmail;
+      }
+      modalForgot.style.display = 'flex';
+    };
+
+    const closeForgotModal = () => {
+      modalForgot.style.display = 'none';
+    };
+
+    btnOpenForgot.addEventListener('click', openForgotModal);
+    btnCloseForgot.addEventListener('click', closeForgotModal);
+    btnCancelForgot.addEventListener('click', closeForgotModal);
+
+    modalForgot.addEventListener('click', (e) => {
+      if (e.target === modalForgot) closeForgotModal();
+    });
+
+    formForgot.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      forgotAlert.style.display = 'none';
+      const email = document.getElementById('forgot-email').value.trim();
+
+      btnSubmitForgot.disabled = true;
+      btnSubmitForgot.textContent = 'Sending Link...';
+
+      const res = await sendPasswordResetEmail(email);
+
+      btnSubmitForgot.disabled = false;
+      btnSubmitForgot.textContent = 'Send Reset Link';
+
+      if (!res.success) {
+        forgotAlert.className = 'alert alert-danger';
+        forgotAlert.textContent = res.error;
+        forgotAlert.style.display = 'block';
+      } else {
+        forgotAlert.className = 'alert alert-success';
+        forgotAlert.textContent = `Password recovery link dispatched to ${email}. Please check your inbox (and spam folder) to reset your password.`;
+        forgotAlert.style.display = 'block';
+        showToast('Password reset email sent!', 'success');
+        setTimeout(() => {
+          closeForgotModal();
+        }, 3500);
+      }
     });
 
     // Form submission

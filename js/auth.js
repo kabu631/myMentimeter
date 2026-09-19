@@ -301,3 +301,66 @@ export function renderNavbar(profile) {
 
   document.getElementById('nav-logout-btn')?.addEventListener('click', signOut);
 }
+
+/**
+ * Initiates the password recovery flow by sending a reset email.
+ */
+export async function sendPasswordResetEmail(email) {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return { success: false, error: 'Database client is not initialized.' };
+  }
+
+  const trimmedEmail = (email || '').trim().toLowerCase();
+  if (!trimmedEmail) {
+    return { success: false, error: 'Please enter your registered college email.' };
+  }
+
+  try {
+    const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+    const redirectTo = `${window.location.origin}${basePath}reset-password.html`;
+
+    const { data, error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+      redirectTo: redirectTo
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('Password reset request exception:', err);
+    return { success: false, error: err.message || 'An error occurred while requesting password reset.' };
+  }
+}
+
+/**
+ * Updates the password for the current user (e.g. following a recovery redirect).
+ */
+export async function updateUserPassword(newPassword) {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return { success: false, error: 'Database client is not initialized.' };
+  }
+
+  if (!newPassword || newPassword.length < 6) {
+    return { success: false, error: 'New password must be at least 6 characters long.' };
+  }
+
+  try {
+    const { data, error } = await supabase.auth.updateUser({
+      password: newPassword
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('Password update exception:', err);
+    return { success: false, error: err.message || 'An error occurred while updating password.' };
+  }
+}
+
