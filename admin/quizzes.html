@@ -217,8 +217,8 @@
         if (q.status === 'published') statusBadge = '<span class="badge badge-published">Published</span>';
         else if (q.status === 'closed') statusBadge = '<span class="badge badge-closed">Closed</span>';
 
-        const timeInfo = q.start_time || q.end_time 
-          ? `<div style="font-size: 0.75rem; color: var(--text-muted);">${q.start_time || ''} - ${q.end_time || ''}</div>`
+        const timeInfo = q.time_limit_minutes 
+          ? `<div style="font-size: 0.75rem; color: var(--text-muted);">${q.time_limit_minutes} mins</div>` 
           : '';
 
         return `

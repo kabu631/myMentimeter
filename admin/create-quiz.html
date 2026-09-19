@@ -81,28 +81,9 @@
           </div>
         </div>
 
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label" for="field-title">Quiz Title *</label>
-            <input type="text" id="field-title" class="form-control" placeholder="e.g. Class 11 — Database Normalization" required>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="field-topic">Lecture Topic *</label>
-            <input type="text" id="field-topic" class="form-control" placeholder="e.g. 1NF, 2NF, 3NF, BCNF" required>
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label" for="field-start-time">Optional Start Time</label>
-            <input type="time" id="field-start-time" class="form-control">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="field-end-time">Optional End Time</label>
-            <input type="time" id="field-end-time" class="form-control">
-          </div>
+        <div class="form-group">
+          <label class="form-label" for="field-title">Quiz Title / Topic *</label>
+          <input type="text" id="field-title" class="form-control" placeholder="e.g. Class 02: Relational Algebra &amp; Schema Constraints" required>
         </div>
 
         <div class="form-group">
@@ -206,11 +187,8 @@
 
         document.getElementById('field-class-number').value = quiz.class_number;
         document.getElementById('field-title').value = quiz.title;
-        document.getElementById('field-topic').value = quiz.topic || quiz.title;
         document.getElementById('field-date').value = quiz.scheduled_date;
         document.getElementById('field-time-limit').value = quiz.time_limit_minutes || '';
-        document.getElementById('field-start-time').value = quiz.start_time || '';
-        document.getElementById('field-end-time').value = quiz.end_time || '';
         document.getElementById('field-description').value = quiz.description || '';
         document.getElementById('field-show-score').checked = quiz.show_score_immediately;
         document.getElementById('field-show-answers').checked = quiz.show_correct_answers;
@@ -362,11 +340,8 @@
 
       const classNum = parseInt(document.getElementById('field-class-number').value, 10);
       const title = document.getElementById('field-title').value.trim();
-      const topic = document.getElementById('field-topic').value.trim();
       const date = document.getElementById('field-date').value;
       const timeLimitVal = document.getElementById('field-time-limit').value;
-      const startTime = document.getElementById('field-start-time').value || null;
-      const endTime = document.getElementById('field-end-time').value || null;
       const desc = document.getElementById('field-description').value.trim();
       const showScore = document.getElementById('field-show-score').checked;
       const showAnswers = document.getElementById('field-show-answers').checked;
@@ -425,13 +400,10 @@
         const payload = {
           class_number: classNum,
           title: title,
-          topic: topic || title,
-          description: desc,
+          description: desc || null,
           scheduled_date: date,
           status: status,
           time_limit_minutes: timeLimitVal ? parseInt(timeLimitVal, 10) : null,
-          start_time: startTime,
-          end_time: endTime,
           show_score_immediately: showScore,
           show_correct_answers: showAnswers,
           updated_at: new Date().toISOString()
@@ -439,33 +411,14 @@
 
         if (quizId) {
           // Update
-          let { error: updErr } = await supabase.from('quizzes').update(payload).eq('id', quizId);
-          if (updErr && updErr.message.includes('topic')) {
-            // Fallback if custom columns not in table yet
-            delete payload.topic;
-            delete payload.start_time;
-            delete payload.end_time;
-            const res = await supabase.from('quizzes').update(payload).eq('id', quizId);
-            if (res.error) throw res.error;
-          } else if (updErr) {
-            throw updErr;
-          }
+          const { error: updErr } = await supabase.from('quizzes').update(payload).eq('id', quizId);
+          if (updErr) throw updErr;
         } else {
           // Insert
           payload.created_by = currentAdmin.id;
-          let { data: newQ, error: insErr } = await supabase.from('quizzes').insert(payload).select().single();
-          if (insErr && insErr.message.includes('topic')) {
-            delete payload.topic;
-            delete payload.start_time;
-            delete payload.end_time;
-            const res = await supabase.from('quizzes').insert(payload).select().single();
-            if (res.error) throw res.error;
-            quizId = res.data.id;
-          } else if (insErr) {
-            throw insErr;
-          } else {
-            quizId = newQ.id;
-          }
+          const { data: newQ, error: insErr } = await supabase.from('quizzes').insert(payload).select().single();
+          if (insErr) throw insErr;
+          quizId = newQ.id;
         }
 
         // Save questions if not locked
