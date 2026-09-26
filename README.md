@@ -35,14 +35,23 @@ Geeta studies in *BBA · 5th Semester*, where Gopal teaches E-commerce, so she s
 **Teachers**
 - Register with the faculty code and **the subjects they teach**, choosing the class of each one (or adding a new
   class). They can add more subjects later from the console.
-- Write quizzes with 2–6 options per question or True/False, marks per question, a time limit, and an
-  automatic close time.
+- Write quizzes with 2–6 options per question or True/False and marks per question, and pick a **quiz timer
+  of 5–60 minutes**. The countdown starts when the quiz is published; students see it, their answers are
+  submitted automatically at zero, and the quiz closes by itself. Reopening a quiz starts a fresh countdown.
 - **Gradebook:** one row per student, one column per quiz, with totals, percentages and weighted final
   marks. Open a student to see every answer or to allow a retake. Export the gradebook or a single student's
   report as CSV.
 - **Students page:** copy a sign-up link that pre-selects the class, move a student to another class, or move
   the whole class to its next semester at the end of term. Marks already earned stay on every student's report.
-- Teachers see only their own subjects and the students of those classes. An **admin** account can see all of them.
+- Teachers see only their own subjects and the students of those classes.
+
+**Super admin**
+- Sees and manages everything: every subject in the teacher console, plus an **Accounts** page listing every
+  teacher and student with their class and last sign-in.
+- Edits names, roll numbers, roles and classes; resets passwords (the new password works straight away);
+  blocks or unblocks sign-in; deletes accounts; moves a departing teacher's subjects, quizzes and marks to
+  another teacher; creates student, teacher or admin accounts with a password; and views or renews the
+  faculty sign-up code.
 
 **How semester marks are counted.** A quiz counts once the student has taken it or once it has closed. A
 missed closed quiz scores 0 out of its full marks. Open quizzes a student hasn't taken yet don't count until
@@ -91,7 +100,8 @@ Open **SQL Editor → New query**, paste the whole of [sql/setup.sql](sql/setup.
 - **Teachers first:** open the site → **Create account** → **I'm a Teacher** → enter the faculty code and add each
   subject you teach, choosing its class or adding the class (for example *BBA*, *1st Semester*). A class is open to
   students once it has at least one subject.
-- **Admin (optional):** register, then run [sql/make_admin.sql](sql/make_admin.sql) with your email.
+- **Super admin:** create an account, then run [sql/make_admin.sql](sql/make_admin.sql) once with that email.
+  After that, further admins can be made from the Accounts page.
 - **Students:** they register and choose their class. On the Students page, *Copy sign-up link* gives a link that
   pre-selects the class, and *Copy invite message* gives text to paste in the class group.
 
@@ -100,9 +110,9 @@ Open **SQL Editor → New query**, paste the whole of [sql/setup.sql](sql/setup.
 ## Day-to-day use
 
 1. **After class:** Quizzes → **+ New Quiz** → write the questions → **Publish now**. You can set an
-   automatic close time, for example "+30 min".
+   quiz timer (5–60 minutes); the quiz closes by itself when it runs out.
 2. Students take it from their dashboard and see their score.
-3. **Close** the quiz (or let the automatic close time pass). Students can then review the correct
+3. The quiz closes when the timer ends (or when you press **Close**). Students can then review the correct
    answers, if you allowed it.
 4. **End of semester:** Gradebook → **Export gradebook (CSV)**. Then, on the Students page, **Move class to next
    semester** (for example BBA 1st → BBA 2nd), and archive the old subject from the Subjects page. Every student
@@ -159,11 +169,12 @@ admin/quizzes.html    Teacher: quiz list per subject (publish / close / reopen /
 admin/create-quiz.html Teacher: quiz editor
 admin/students.html   Teacher: class roster, sign-up link, move students / promote a class
 admin/results.html    Teacher: semester gradebook, student reports, CSV export
+admin/accounts.html   Super admin: every account, passwords, blocking, faculty code
 js/                   One module per page plus shared auth, utils, classes, student-data, review, admin-service
 css/                  Design tokens (main), components, quiz, admin, auth, landing
 design-system/        Design system master file (source of truth for the UI)
 sql/setup.sql         Complete database: classes, subjects, auto-enrollment, RLS, RPCs (run this)
-sql/make_admin.sql    Change an account's role
+sql/make_admin.sql    Make the first super admin (later ones: Accounts page)
 sql/reset_student_password.sql  Set a temporary password
 ```
 

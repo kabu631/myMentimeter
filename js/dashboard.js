@@ -9,16 +9,17 @@
  * 4. Five most recent results
  */
 
-import { getSupabase, showToast } from './supabase.js';
+import { getSupabase, showToast, syncServerClock } from './supabase.js';
 import { requireAuth, renderNavbar } from './auth.js';
 import { loadStudentData, overallAverage } from './student-data.js';
 import { fetchClasses, classOptionsHtml } from './classes.js';
 import {
   escapeHtml, fmtNum, fmtPct, fmtDate, fmtDateTime, classLabel, classTitle, classChip, courseTag,
-  percentOf, pctBadgeClass, isQuizOpen, isScoreVisible, emptyState, setBusy, friendlyError, ICONS
+  percentOf, pctBadgeClass, isQuizOpen, isScoreVisible, emptyState, setBusy, friendlyError, ICONS, startCountdowns
 } from './utils.js';
 
 let currentUser = null;
+let countdownTimer = null;
 
 async function initStudentDashboard() {
   currentUser = await requireAuth('student');
@@ -26,6 +27,7 @@ async function initStudentDashboard() {
 
   document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = ICONS[el.dataset.icon]; });
   renderIdentity();
+  await syncServerClock();
   await loadDashboard();
 }
 
@@ -71,6 +73,7 @@ function renderOpenQuizzes({ quizzes, courseById, attemptByQuiz }) {
     .sort((a, b) => Number(attemptByQuiz.has(a.id)) - Number(attemptByQuiz.has(b.id)) ||
                     String(b.scheduled_date).localeCompare(String(a.scheduled_date)));
 
+  clearInterval(countdownTimer);
   if (open.length === 0) {
     container.innerHTML = `<div class="card">${emptyState('clock', 'No open quizzes right now',
       'When one of your teachers publishes a quiz after class, it will show up here.')}</div>`;
@@ -84,9 +87,11 @@ function renderOpenQuizzes({ quizzes, courseById, attemptByQuiz }) {
       course?.teacher?.full_name,
       `${quiz.question_count} question${quiz.question_count === 1 ? '' : 's'}`,
       `${fmtNum(quiz.total_marks)} marks`,
-      quiz.time_limit_minutes ? `${quiz.time_limit_minutes} min limit` : 'Untimed',
-      quiz.closes_at ? `Closes ${fmtDateTime(quiz.closes_at)}` : null
-    ].filter(Boolean);
+      quiz.time_limit_minutes ? `${quiz.time_limit_minutes}-minute timer` : 'No timer'
+    ].filter(Boolean).map(m => `<span>${escapeHtml(m)}</span>`);
+    if (quiz.closes_at) {
+      meta.push(`<span class="countdown" data-closes-at="${escapeHtml(quiz.closes_at)}" title="Closes at ${escapeHtml(fmtDateTime(quiz.closes_at))}"></span>`);
+    }
 
     let action;
     if (!attempt) {
@@ -113,12 +118,16 @@ function renderOpenQuizzes({ quizzes, courseById, attemptByQuiz }) {
           </div>
           <h3 class="quiz-tile-title">${escapeHtml(quiz.title)}</h3>
           ${quiz.description ? `<p class="small" style="margin: 0.25rem 0 0;">${escapeHtml(quiz.description)}</p>` : ''}
-          <div class="quiz-tile-meta">${meta.map(m => `<span>${escapeHtml(m)}</span>`).join('')}</div>
+          <div class="quiz-tile-meta">${meta.join('')}</div>
         </div>
         <div>${action}</div>
       </div>
     `;
   }).join('');
+
+  // Live countdowns; when one runs out, reload so the closed quiz leaves this list
+  clearInterval(countdownTimer);
+  countdownTimer = startCountdowns(container, () => loadDashboard());
 }
 
 function renderCourses({ courses, summaries }) {

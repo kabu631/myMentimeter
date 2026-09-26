@@ -1053,3 +1053,15 @@ input[type="radio"] {
   .card, .stat-card { box-shadow: none; }
   .table-container { overflow: visible; }
 }
+
+/* Live quiz countdowns ("Closes in 7:05") */
+.countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-text);
+}
+
+.countdown.is-urgent { color: var(--danger); }

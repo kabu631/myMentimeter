@@ -9,7 +9,7 @@
 
 import { getSupabase, showToast } from './supabase.js';
 import { requireAuth } from './auth.js';
-import { courseLabel, classTitle, escapeHtml, friendlyError, summarizeCourse } from './utils.js';
+import { courseLabel, classTitle, escapeHtml, friendlyError, summarizeCourse, nowMs } from './utils.js';
 
 const ACTIVE_COURSE_KEY = 'dcq_active_course';
 const CLASS_COLUMNS = 'id, program, semester, section';
@@ -147,10 +147,13 @@ export async function loadCourseGradebook(course) {
   return { students, quizzes, attempts, attemptsByStudent, summaries };
 }
 
-/** Change a quiz's lifecycle status. Reopening clears an automatic close time that has already passed. */
+/**
+ * Change a quiz's lifecycle status. Reopening a quiz whose time ran out clears
+ * the old deadline; the database then starts a fresh countdown for timed quizzes.
+ */
 export async function updateQuizStatus(quiz, newStatus) {
   const patch = { status: newStatus, updated_at: new Date().toISOString() };
-  if (newStatus === 'published' && quiz.closes_at && new Date(quiz.closes_at) < new Date()) {
+  if (newStatus === 'published' && quiz.closes_at && new Date(quiz.closes_at).getTime() < nowMs()) {
     patch.closes_at = null;
   }
   if (newStatus === 'published' && !quiz.question_count) {
@@ -163,7 +166,8 @@ export async function updateQuizStatus(quiz, newStatus) {
     showToast('Could not update the quiz: ' + friendlyError(error), 'danger');
     return false;
   }
-  const label = { published: 'published — students can take it now', closed: 'closed', draft: 'moved to drafts' }[newStatus];
+  const timer = quiz.time_limit_minutes ? ` It closes automatically in ${quiz.time_limit_minutes} minutes` : '';
+  const label = { published: `published — students can take it now.${timer}`, closed: 'closed', draft: 'moved to drafts' }[newStatus];
   showToast(`Quiz ${label}.`, 'success');
   return true;
 }

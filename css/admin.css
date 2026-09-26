@@ -279,3 +279,40 @@
   justify-content: space-between;
   gap: 1.25rem;
 }
+
+/* Administration: accounts page */
+.admin-panel { display: flex; flex-direction: column; gap: 0.75rem; }
+.admin-panel .section-title { margin: 0; }
+.admin-panel p { margin: 0; }
+.admin-panel > .btn { align-self: flex-start; }
+
+.code-chip {
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--text-primary);
+  background: var(--primary-soft);
+  border: 1px dashed var(--primary-bright);
+  border-radius: var(--radius-md);
+  padding: 0.35rem 0.8rem;
+  min-height: 40px;
+  cursor: pointer;
+}
+
+.account-tabs { margin-bottom: 0; min-width: min(100%, 420px); }
+.data-table tr.row-blocked td { background: var(--danger-bg); }
+
+/* Quiz builder: timer explanation under the timing fields */
+.timer-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: -0.25rem 0 1.25rem;
+}
+
+.timer-status {
+  font-weight: 700;
+  color: var(--primary);
+}

@@ -9,11 +9,11 @@
  * - Submission is graded by the submit_quiz() database function
  */
 
-import { getSupabase, showToast } from './supabase.js';
+import { getSupabase, showToast, syncServerClock } from './supabase.js';
 import { requireAuth } from './auth.js';
 import {
   escapeHtml, fmtNum, fmtPct, classLabel, courseLabel, courseTag, percentOf, pctBadgeClass,
-  isQuizClosed, isScoreVisible, friendlyError
+  isQuizClosed, isScoreVisible, friendlyError, nowMs, fmtCountdown
 } from './utils.js';
 
 let currentUser = null;
@@ -41,6 +41,7 @@ async function initQuizEngine() {
   }
 
   const supabase = getSupabase();
+  const clockReady = syncServerClock();   // countdown uses the database clock
 
   try {
     const { data: quiz, error: quizErr } = await supabase
@@ -67,6 +68,7 @@ async function initQuizEngine() {
       .maybeSingle();
     if (attErr) throw attErr;
 
+    await clockReady;
     if (existingAttempt) {
       showCompletionCard(existingAttempt);
       showToast('You have already submitted this quiz.', 'info');
@@ -126,7 +128,7 @@ function restoreProgress() {
   } catch {
     // ignore corrupt storage
   }
-  if (!currentQuiz._startedAt) currentQuiz._startedAt = Date.now();
+  if (!currentQuiz._startedAt) currentQuiz._startedAt = nowMs();
   saveProgress();
 }
 
@@ -163,13 +165,8 @@ function setupDeadline() {
 }
 
 function tick() {
-  const remaining = Math.max(0, Math.round((deadline - Date.now()) / 1000));
-  const hrs = Math.floor(remaining / 3600);
-  const mins = Math.floor((remaining % 3600) / 60);
-  const secs = remaining % 60;
-  $('timer-countdown').textContent = hrs > 0
-    ? `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
-    : `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  const remaining = Math.max(0, Math.round((deadline - nowMs()) / 1000));
+  $('timer-countdown').textContent = fmtCountdown(remaining);
 
   if (remaining <= 60) $('quiz-timer-pill').classList.add('timer-warning');
 

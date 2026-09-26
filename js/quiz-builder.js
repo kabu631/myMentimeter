@@ -7,9 +7,9 @@
  * questions are written in a single transaction.
  */
 
-import { getSupabase, showToast } from './supabase.js';
+import { getSupabase, showToast, syncServerClock } from './supabase.js';
 import { guardAdminPage, loadTeacherCourses, pickActiveCourseId, rememberActiveCourse, noCoursesHtml } from './admin-service.js';
-import { escapeHtml, courseLabel, todayIso, toLocalInput, fromLocalInput, fmtNum, friendlyError, ICONS } from './utils.js';
+import { escapeHtml, courseLabel, todayIso, fmtNum, fmtDateTime, fmtCountdown, nowMs, isQuizClosed, friendlyError, ICONS } from './utils.js';
 
 const OPTION_IDS = ['A', 'B', 'C', 'D', 'E', 'F'];
 const $ = (id) => document.getElementById(id);
@@ -33,7 +33,7 @@ async function initBuilder() {
   if (!teacher) return;
 
   try {
-    courses = await loadTeacherCourses();
+    [courses] = await Promise.all([loadTeacherCourses(), syncServerClock()]);
   } catch (err) {
     showToast(friendlyError(err), 'danger');
     return;
@@ -85,9 +85,9 @@ async function loadQuiz(quizId) {
   $('field-class-number').value = quiz.class_number;
   $('field-title').value = quiz.title;
   $('field-date').value = quiz.scheduled_date;
-  $('field-time-limit').value = quiz.time_limit_minutes || '';
+  setTimerField(quiz.time_limit_minutes);
   $('field-description').value = quiz.description || '';
-  $('field-closes-at').value = toLocalInput(quiz.closes_at);
+  showTimerStatus(quiz);
   $('field-show-score').checked = quiz.show_score_immediately;
   $('field-show-answers').checked = quiz.show_correct_answers;
   $('btn-save-publish').innerHTML = { draft: 'Publish now &rarr;', published: 'Save &amp; keep published', closed: 'Save changes' }[quiz.status];
@@ -256,19 +256,7 @@ function setupEvents() {
 
   document.querySelectorAll('#builder input, #builder textarea, #builder select').forEach(el => el.addEventListener('change', markDirty));
 
-  document.querySelectorAll('[data-close-in]').forEach(btn => btn.addEventListener('click', () => {
-    const input = $('field-closes-at');
-    const v = btn.dataset.closeIn;
-    if (v === 'clear') input.value = '';
-    else if (v === 'tonight') {
-      const d = new Date();
-      d.setHours(23, 59, 0, 0);
-      input.value = toLocalInput(d);
-    } else {
-      input.value = toLocalInput(new Date(Date.now() + Number(v) * 60000));
-    }
-    markDirty();
-  }));
+  $('field-timer').addEventListener('change', () => { if (editingQuiz) showTimerStatus(editingQuiz); });
 
   window.addEventListener('beforeunload', (e) => {
     if (isDirty && !isSaving) {
@@ -284,12 +272,8 @@ function validate(status) {
   if (!classNum || classNum < 1 || classNum > 300) return 'Enter a class number between 1 and 300.';
   if (!$('field-title').value.trim()) return 'Give the quiz a title.';
   if (!$('field-date').value) return 'Choose the class date.';
-  const limit = $('field-time-limit').value;
-  if (limit && (parseInt(limit, 10) < 1 || parseInt(limit, 10) > 300)) return 'Time limit must be between 1 and 300 minutes.';
-  const closesAt = $('field-closes-at').value;
-  if (closesAt && status === 'published' && new Date(closesAt) < new Date() && (!editingQuiz || editingQuiz.status === 'draft')) {
-    return 'The automatic close time is in the past — students could not take the quiz. Change or clear it.';
-  }
+  const timer = parseInt($('field-timer').value, 10);
+  if (timer && (timer < 5 || timer > 60) && timer !== editingQuiz?.time_limit_minutes) return 'The quiz timer must be between 5 and 60 minutes.';
   if (isLocked) return null;
 
   if (questions.length === 0) return 'Add at least one question.';
@@ -326,8 +310,9 @@ async function save(status) {
     description: $('field-description').value.trim(),
     scheduled_date: $('field-date').value,
     status,
-    time_limit_minutes: $('field-time-limit').value ? parseInt($('field-time-limit').value, 10) : null,
-    closes_at: fromLocalInput($('field-closes-at').value),
+    // With a timer the database sets the close time when the quiz is published
+    time_limit_minutes: $('field-timer').value ? parseInt($('field-timer').value, 10) : null,
+    closes_at: $('field-timer').value ? null : (editingQuiz?.closes_at ?? null),
     show_score_immediately: $('field-show-score').checked,
     show_correct_answers: $('field-show-answers').checked
   };
@@ -354,9 +339,48 @@ async function save(status) {
   }
 
   isDirty = false;
-  const verb = status === 'draft' ? 'saved as a draft' : (editingQuiz && editingQuiz.status !== 'draft' ? 'saved' : 'published — students can take it now');
-  showToast(`Quiz ${verb}.`, 'success');
+  const timerNote = quizPayload.time_limit_minutes ? ` It closes automatically in ${quizPayload.time_limit_minutes} minutes.` : '';
+  const verb = status === 'draft' ? 'saved as a draft' : (editingQuiz && editingQuiz.status !== 'draft' ? 'saved' : `published — students can take it now.${timerNote}`);
+  showToast(`Quiz ${verb}${verb.endsWith('.') ? '' : '.'}`, 'success');
   setTimeout(() => { window.location.href = `quizzes.html?course=${quizPayload.course_id}`; }, 700);
+}
+
+// ------------------------------------------------------------------------------
+// Quiz timer
+// ------------------------------------------------------------------------------
+
+/** Select the saved timer; an older value outside the list is kept as its own option. */
+function setTimerField(minutes) {
+  const select = $('field-timer');
+  if (!minutes) {
+    select.value = '';
+    return;
+  }
+  if (![...select.options].some(o => o.value === String(minutes))) {
+    select.add(new Option(`${minutes} minutes (earlier setting)`, String(minutes)), select.options.length - 1);
+  }
+  select.value = String(minutes);
+}
+
+/** For a quiz that is already published: when it closes, or that its time is up. */
+function showTimerStatus(quiz) {
+  const status = $('timer-status');
+  const timer = parseInt($('field-timer').value, 10) || null;
+  let text = '';
+  if (quiz.status === 'published' && quiz.closes_at && isQuizClosed(quiz)) {
+    const mins = quiz.time_limit_minutes || timer;
+    text = `Time is up — this quiz closed at ${fmtDateTime(quiz.closes_at)}. Reopen it from the Quizzes page to start a new${mins ? ` ${mins}-minute` : ''} countdown.`;
+  } else if (quiz.status === 'published' && timer && quiz.published_at) {
+    const closes = new Date(new Date(quiz.published_at).getTime() + timer * 60000);
+    const left = (closes.getTime() - nowMs()) / 1000;
+    text = left > 0
+      ? `Open now: closes at ${fmtDateTime(closes.toISOString())} (${fmtCountdown(left)} left).`
+      : 'With this timer the quiz closes as soon as you save.';
+  } else if (quiz.status === 'published' && !timer) {
+    text = 'Open now, with no timer: it stays open until you close it.';
+  }
+  status.textContent = text;
+  status.classList.toggle('hidden', !text);
 }
 
 document.addEventListener('DOMContentLoaded', initBuilder);

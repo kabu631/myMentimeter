@@ -8,6 +8,7 @@
  */
 
 import { APP_CONFIG } from './config.js';
+import { setClockOffset } from './utils.js';
 
 let supabaseClient = null;
 
@@ -52,6 +53,31 @@ export function getSupabase() {
     console.error('Failed to initialize Supabase client:', err);
     return null;
   }
+}
+
+/**
+ * Line the app's clock up with the database clock (public.server_time), so quiz
+ * countdowns are right even on a phone whose clock is a few minutes off.
+ */
+export async function syncServerClock() {
+  try {
+    const t0 = Date.now();
+    const { data, error } = await getSupabase().rpc('server_time');
+    const t1 = Date.now();
+    if (!error && data) setClockOffset(new Date(data).getTime() - (t0 + t1) / 2);
+  } catch {
+    // keep the device clock
+  }
+}
+
+/**
+ * A throwaway client that never reads or writes the stored session. The admin
+ * uses it to sign up accounts for other people without being signed out.
+ */
+export function createDetachedClient() {
+  return window.supabase.createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'quizora-detached' }
+  });
 }
 
 /**

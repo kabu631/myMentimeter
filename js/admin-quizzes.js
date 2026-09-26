@@ -4,20 +4,21 @@
  * ==============================================================================
  */
 
-import { getSupabase, showToast } from './supabase.js';
+import { getSupabase, showToast, syncServerClock } from './supabase.js';
 import {
   guardAdminPage, loadTeacherCourses, pickActiveCourseId, renderCourseSwitcher, noCoursesHtml,
   updateQuizStatus, deleteQuiz
 } from './admin-service.js';
 import {
   escapeHtml, fmtNum, fmtDate, fmtDateTime, classLabel, courseLabel, isQuizOpen, isQuizClosed,
-  quizStatusBadge, emptyState, friendlyError
+  quizStatusBadge, emptyState, friendlyError, startCountdowns
 } from './utils.js';
 
 let courses = [];
 let activeCourse = null;
 let quizzes = [];
 let filter = 'all';
+let countdownTimer = null;
 
 async function initQuizzesPage() {
   const teacher = await guardAdminPage();
@@ -49,6 +50,7 @@ async function initQuizzesPage() {
   modal.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', () => modal.classList.remove('active')));
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('active'); });
 
+  await syncServerClock();
   await selectCourse(pickActiveCourseId(courses));
 }
 
@@ -110,16 +112,20 @@ function renderTable() {
           <strong class="strong">${escapeHtml(q.title)}</strong>
           ${q.description ? `<div class="small muted">${escapeHtml(q.description.length > 70 ? q.description.slice(0, 70) + '…' : q.description)}</div>` : ''}
         </td>
-        <td class="small nowrap">${fmtDate(q.scheduled_date)}${q.time_limit_minutes ? `<div class="muted">${q.time_limit_minutes} min limit</div>` : ''}</td>
+        <td class="small nowrap">${fmtDate(q.scheduled_date)}${q.time_limit_minutes ? `<div class="muted">${q.time_limit_minutes}-min timer</div>` : ''}</td>
         <td class="nowrap">${q.question_count} · ${fmtNum(q.total_marks)} marks</td>
         <td class="nowrap"><strong>${q.attempt_count}</strong> / ${activeCourse.student_count}</td>
-        <td>${quizStatusBadge(q)}${q.closes_at && q.status === 'published' ? `<div class="small muted">${isQuizClosed(q) ? 'Closed' : 'Closes'} ${fmtDateTime(q.closes_at)}</div>` : ''}</td>
+        <td>${quizStatusBadge(q)}${q.closes_at && q.status === 'published' ? (isQuizClosed(q) ? `<div class="small muted">Time ran out ${fmtDateTime(q.closes_at)}</div>` : `<div class="small countdown" data-closes-at="${escapeHtml(q.closes_at)}"></div>`) : ''}</td>
         <td><div class="toolbar" style="gap: 0.35rem; flex-wrap: nowrap;">${actions.join('')}</div></td>
       </tr>
     `;
   }).join('');
 
   tbody.querySelectorAll('[data-action]').forEach(btn => btn.addEventListener('click', () => handleAction(btn.dataset.action, btn.dataset.id)));
+
+  // live countdowns; when a timer runs out, reload so the quiz shows as closed
+  clearInterval(countdownTimer);
+  countdownTimer = startCountdowns(tbody, () => loadQuizzes());
 }
 
 async function handleAction(action, quizId) {

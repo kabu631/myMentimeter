@@ -4,12 +4,12 @@
  * ==============================================================================
  */
 
-import { getSupabase, showToast } from './supabase.js';
+import { getSupabase, showToast, syncServerClock } from './supabase.js';
 import { guardAdminPage, loadTeacherCourses, rememberActiveCourse, updateQuizStatus, fetchAllRows } from './admin-service.js';
 import { fetchClasses, createClass, classPickerHtml, bindClassPicker, readClassPicker } from './classes.js';
 import {
   escapeHtml, fmtPct, fmtDateTime, classLabel, classTitle, courseTag, percentOf, isQuizOpen,
-  setBusy, friendlyError, emptyState, showFieldError, clearFieldErrors, ICONS
+  setBusy, friendlyError, emptyState, showFieldError, clearFieldErrors, ICONS, startCountdowns
 } from './utils.js';
 
 let teacher = null;
@@ -18,6 +18,7 @@ let quizzes = [];
 let attempts = [];
 let classes = [];
 let editingCourse = null;
+let countdownTimer = null;
 
 async function initHome() {
   teacher = await guardAdminPage();
@@ -28,6 +29,7 @@ async function initHome() {
   document.getElementById('show-archived').addEventListener('change', renderCourses);
   setupCourseModal();
 
+  await syncServerClock();
   await loadAll();
 
   if (new URLSearchParams(window.location.search).get('new') === '1') openCourseModal(null);
@@ -78,6 +80,7 @@ function renderMetrics() {
 function renderOpenQuizzes() {
   const container = document.getElementById('open-quizzes');
   const courseById = new Map(courses.map(c => [c.id, c]));
+  clearInterval(countdownTimer);
   const open = quizzes.filter(isQuizOpen).sort((a, b) => String(b.scheduled_date).localeCompare(String(a.scheduled_date)));
 
   if (open.length === 0) {
@@ -101,7 +104,9 @@ function renderOpenQuizzes() {
                 </td>
                 <td><strong class="strong">${classLabel(q.class_number)}</strong> · ${escapeHtml(q.title)}</td>
                 <td><strong>${submitted}</strong> / ${course?.student_count ?? '–'}</td>
-                <td class="small">${q.closes_at ? fmtDateTime(q.closes_at) : 'When you close it'}</td>
+                <td class="small">${q.closes_at
+                  ? `<span class="countdown" data-closes-at="${escapeHtml(q.closes_at)}" data-prefix="in "></span><div class="muted">${fmtDateTime(q.closes_at)}</div>`
+                  : 'When you close it'}</td>
                 <td class="nowrap">
                   <button class="btn btn-outline btn-sm" data-close-quiz="${q.id}">Close now</button>
                   <a class="btn btn-secondary btn-sm" href="results.html?course=${q.course_id}">Results</a>
@@ -112,6 +117,9 @@ function renderOpenQuizzes() {
       </table>
     </div>
   `;
+
+  // live countdowns; when a timer runs out, reload so the quiz leaves the open list
+  countdownTimer = startCountdowns(container, () => loadAll());
 
   container.querySelectorAll('[data-close-quiz]').forEach(btn => {
     btn.addEventListener('click', async () => {

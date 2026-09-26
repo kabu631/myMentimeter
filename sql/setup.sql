@@ -151,8 +151,9 @@ CREATE TABLE IF NOT EXISTS public.quizzes (
     description TEXT,
     scheduled_date DATE NOT NULL DEFAULT CURRENT_DATE,
     status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'closed')),
-    time_limit_minutes INT CHECK (time_limit_minutes IS NULL OR time_limit_minutes > 0),
-    closes_at TIMESTAMPTZ,               -- optional automatic close time
+    time_limit_minutes INT CHECK (time_limit_minutes IS NULL OR time_limit_minutes > 0),  -- quiz timer: 5-60 minutes (see 5f)
+    published_at TIMESTAMPTZ,            -- when the quiz was last published; the timer starts here
+    closes_at TIMESTAMPTZ,               -- when it closes by itself (published_at + timer)
     show_score_immediately BOOLEAN NOT NULL DEFAULT true,
     show_correct_answers BOOLEAN NOT NULL DEFAULT false,
     total_marks NUMERIC(6, 2) NOT NULL DEFAULT 0,   -- maintained by trigger
@@ -166,6 +167,7 @@ ALTER TABLE public.quizzes ADD COLUMN IF NOT EXISTS course_id UUID REFERENCES pu
 ALTER TABLE public.quizzes ADD COLUMN IF NOT EXISTS closes_at TIMESTAMPTZ;
 ALTER TABLE public.quizzes ADD COLUMN IF NOT EXISTS total_marks NUMERIC(6, 2) NOT NULL DEFAULT 0;
 ALTER TABLE public.quizzes ADD COLUMN IF NOT EXISTS question_count INT NOT NULL DEFAULT 0;
+ALTER TABLE public.quizzes ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;
 ALTER TABLE public.quizzes DROP CONSTRAINT IF EXISTS unique_class_number;
 ALTER TABLE public.quizzes DROP CONSTRAINT IF EXISTS quizzes_class_number_check;
 ALTER TABLE public.quizzes ADD CONSTRAINT quizzes_class_number_check CHECK (class_number BETWEEN 1 AND 300);
@@ -565,6 +567,9 @@ CREATE TRIGGER trg_sync_quiz_totals
     AFTER INSERT OR UPDATE OR DELETE ON public.questions
     FOR EACH ROW EXECUTE FUNCTION private.sync_quiz_totals();
 
+-- Existing published/closed quizzes from before the timer: publish time unknown, use creation time
+UPDATE public.quizzes SET published_at = created_at WHERE published_at IS NULL AND status <> 'draft';
+
 -- Backfill totals for existing quizzes
 UPDATE public.quizzes z
 SET total_marks = coalesce((SELECT sum(marks) FROM public.questions q WHERE q.quiz_id = z.id), 0),
@@ -581,6 +586,11 @@ SET search_path = public
 AS $$
 BEGIN
     IF NEW.role <> 'student' THEN
+        -- made a teacher/admin: leave the class's subjects, except ones with marks
+        IF TG_OP = 'UPDATE' AND OLD.role = 'student' THEN
+            DELETE FROM public.enrollments e
+            WHERE e.student_id = NEW.id AND NOT private.student_has_marks_in(NEW.id, e.course_id);
+        END IF;
         RETURN NULL;
     END IF;
     IF TG_OP = 'UPDATE' THEN
@@ -642,6 +652,42 @@ DROP TRIGGER IF EXISTS trg_sync_course_enrollments ON public.courses;
 CREATE TRIGGER trg_sync_course_enrollments
     AFTER INSERT OR UPDATE OF class_id, is_archived ON public.courses
     FOR EACH ROW EXECUTE FUNCTION private.sync_course_enrollments();
+
+-- 5f. Quiz timer. The teacher picks 5-60 minutes; the countdown starts when the
+--     quiz is published and the quiz closes by itself when it ends (students'
+--     answers are submitted automatically at that moment). Reopening a quiz
+--     whose time ran out starts a fresh countdown. Done here, on the database
+--     clock, so a phone with the wrong time can't change the deadline.
+CREATE OR REPLACE FUNCTION private.apply_quiz_timer()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = '' AS $$
+DECLARE
+    v_restart BOOLEAN := false;
+BEGIN
+    IF NEW.time_limit_minutes IS NOT NULL AND NEW.time_limit_minutes NOT BETWEEN 5 AND 60
+       AND (TG_OP = 'INSERT' OR NEW.time_limit_minutes IS DISTINCT FROM OLD.time_limit_minutes) THEN
+        RAISE EXCEPTION 'The quiz timer must be between 5 and 60 minutes.';
+    END IF;
+
+    IF NEW.status = 'published' THEN
+        -- first publish, or reopening a quiz whose timer already ran out
+        IF TG_OP = 'INSERT' OR OLD.status IS DISTINCT FROM 'published'
+           OR (OLD.closes_at IS NOT NULL AND OLD.closes_at <= now() AND NEW.closes_at IS NULL) THEN
+            NEW.published_at := now();
+            v_restart := true;
+        END IF;
+        IF NEW.time_limit_minutes IS NOT NULL
+           AND (v_restart OR NEW.closes_at IS NULL OR NEW.time_limit_minutes IS DISTINCT FROM OLD.time_limit_minutes) THEN
+            NEW.closes_at := coalesce(NEW.published_at, now()) + make_interval(mins => NEW.time_limit_minutes);
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_apply_quiz_timer ON public.quizzes;
+CREATE TRIGGER trg_apply_quiz_timer
+    BEFORE INSERT OR UPDATE ON public.quizzes
+    FOR EACH ROW EXECUTE FUNCTION private.apply_quiz_timer();
 
 -- 5e. Tidy subject names/codes so "Computer  applications" and
 --     "Computer Applications" are recognised as the same subject.
@@ -1077,7 +1123,7 @@ BEGIN
             coalesce((p_quiz->>'scheduled_date')::DATE, CURRENT_DATE),
             v_status,
             nullif(p_quiz->>'time_limit_minutes', '')::INT,
-            nullif(p_quiz->>'closes_at', '')::TIMESTAMPTZ,
+            CASE WHEN nullif(p_quiz->>'time_limit_minutes', '') IS NULL THEN nullif(p_quiz->>'closes_at', '')::TIMESTAMPTZ END,
             coalesce((p_quiz->>'show_score_immediately')::BOOLEAN, true),
             coalesce((p_quiz->>'show_correct_answers')::BOOLEAN, false),
             auth.uid()
@@ -1093,7 +1139,8 @@ BEGIN
             scheduled_date = coalesce((p_quiz->>'scheduled_date')::DATE, scheduled_date),
             status = v_status,
             time_limit_minutes = nullif(p_quiz->>'time_limit_minutes', '')::INT,
-            closes_at = nullif(p_quiz->>'closes_at', '')::TIMESTAMPTZ,
+            closes_at = CASE WHEN nullif(p_quiz->>'time_limit_minutes', '') IS NULL
+                             THEN nullif(p_quiz->>'closes_at', '')::TIMESTAMPTZ ELSE closes_at END,
             show_score_immediately = coalesce((p_quiz->>'show_score_immediately')::BOOLEAN, true),
             show_correct_answers = coalesce((p_quiz->>'show_correct_answers')::BOOLEAN, false),
             updated_at = now()
@@ -1125,6 +1172,145 @@ BEGIN
     END IF;
 
     RETURN jsonb_build_object('id', v_id, 'locked', v_locked);
+END;
+$$;
+
+-- 7h. Administrator tools (role 'admin' only): every account with its sign-in
+--     status, password reset, block / unblock, delete, hand a teacher's
+--     subjects to another teacher, and the faculty sign-up code.
+--     Name, roll number, role and class are edited directly on public.profiles
+--     (RLS and 5b already allow admins to change any field).
+CREATE SCHEMA IF NOT EXISTS extensions;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;   -- already installed on Supabase
+
+CREATE OR REPLACE FUNCTION private.require_admin()
+RETURNS VOID LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+    IF NOT private.is_admin() THEN
+        RAISE EXCEPTION 'Only the administrator can do this.';
+    END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION private.admin_list_accounts()
+RETURNS TABLE (id UUID, role TEXT, full_name TEXT, student_id TEXT, email TEXT, class_id UUID,
+               created_at TIMESTAMPTZ, last_sign_in_at TIMESTAMPTZ, is_blocked BOOLEAN,
+               subject_count INT, attempt_count INT)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+#variable_conflict use_column
+BEGIN
+    PERFORM private.require_admin();
+    RETURN QUERY
+    SELECT p.id, p.role, p.full_name, p.student_id, p.email, p.class_id, p.created_at,
+           u.last_sign_in_at,
+           coalesce(u.banned_until > now(), false),
+           (SELECT count(*)::INT FROM public.courses c WHERE c.teacher_id = p.id),
+           (SELECT count(*)::INT FROM public.quiz_attempts a WHERE a.student_id = p.id)
+    FROM public.profiles p
+    LEFT JOIN auth.users u ON u.id = p.id
+    ORDER BY p.role, lower(p.full_name);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION private.admin_set_password(p_user_id UUID, p_password TEXT)
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+    PERFORM private.require_admin();
+    IF length(coalesce(p_password, '')) < 6 THEN
+        RAISE EXCEPTION 'The password needs at least 6 characters.';
+    END IF;
+    UPDATE auth.users
+    SET encrypted_password = extensions.crypt(p_password, extensions.gen_salt('bf', 10)),
+        updated_at = now()
+    WHERE id = p_user_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Account not found.';
+    END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION private.admin_set_blocked(p_user_id UUID, p_blocked BOOLEAN)
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+    PERFORM private.require_admin();
+    IF p_user_id = auth.uid() THEN
+        RAISE EXCEPTION 'You cannot block your own account.';
+    END IF;
+    UPDATE auth.users
+    SET banned_until = CASE WHEN p_blocked THEN now() + interval '100 years' END,
+        updated_at = now()
+    WHERE id = p_user_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Account not found.';
+    END IF;
+    IF p_blocked THEN
+        BEGIN   -- sign them out of every device
+            DELETE FROM auth.sessions WHERE user_id = p_user_id;
+        EXCEPTION WHEN undefined_table OR insufficient_privilege THEN
+            NULL;
+        END;
+    END IF;
+END;
+$$;
+
+-- Teachers who still own subjects can't be deleted: that would delete the
+-- subjects' quizzes and every student's marks. Hand the subjects over first.
+CREATE OR REPLACE FUNCTION private.admin_delete_account(p_user_id UUID)
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+    v_subjects INT;
+BEGIN
+    PERFORM private.require_admin();
+    IF p_user_id = auth.uid() THEN
+        RAISE EXCEPTION 'You cannot delete your own account.';
+    END IF;
+    SELECT count(*) INTO v_subjects FROM public.courses WHERE teacher_id = p_user_id;
+    IF v_subjects > 0 THEN
+        RAISE EXCEPTION 'This teacher still has % subject(s). Move them to another teacher first, so no student marks are lost.', v_subjects;
+    END IF;
+    DELETE FROM auth.users WHERE id = p_user_id;          -- cascades to the profile and its data
+    IF NOT FOUND THEN
+        DELETE FROM public.profiles WHERE id = p_user_id;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'Account not found.';
+        END IF;
+    END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION private.admin_transfer_subjects(p_from UUID, p_to UUID)
+RETURNS INT LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+    v_moved INT;
+BEGIN
+    PERFORM private.require_admin();
+    IF p_from = p_to OR NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = p_to AND role IN ('teacher', 'admin')) THEN
+        RAISE EXCEPTION 'Choose another teacher to take over the subjects.';
+    END IF;
+    UPDATE public.courses SET teacher_id = p_to WHERE teacher_id = p_from;
+    GET DIAGNOSTICS v_moved = ROW_COUNT;
+    RETURN v_moved;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION private.admin_get_faculty_code()
+RETURNS TEXT LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+    PERFORM private.require_admin();
+    RETURN (SELECT value FROM public.app_settings WHERE key = 'faculty_signup_code');
+END;
+$$;
+
+-- A new random code; the old one stops working for new teacher sign-ups.
+CREATE OR REPLACE FUNCTION private.admin_new_faculty_code()
+RETURNS TEXT LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+    v_code TEXT := public.generate_join_code(4) || '-' || public.generate_join_code(4) || '-' || public.generate_join_code(4);
+BEGIN
+    PERFORM private.require_admin();
+    INSERT INTO public.app_settings (key, value) VALUES ('faculty_signup_code', v_code)
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+    RETURN v_code;
 END;
 $$;
 
@@ -1179,6 +1365,58 @@ RETURNS JSONB LANGUAGE sql SECURITY INVOKER SET search_path = '' AS $$
     SELECT private.get_student_attempt_review(p_attempt_id);
 $$;
 
+-- The database clock, so countdowns agree even when a phone's clock is off
+CREATE OR REPLACE FUNCTION public.server_time()
+RETURNS TIMESTAMPTZ LANGUAGE sql STABLE SECURITY INVOKER SET search_path = '' AS $$
+    SELECT now();
+$$;
+
+-- Administrator tools (7h)
+DROP FUNCTION IF EXISTS public.admin_list_accounts();
+CREATE FUNCTION public.admin_list_accounts()
+RETURNS TABLE (id UUID, role TEXT, full_name TEXT, student_id TEXT, email TEXT, class_id UUID,
+               created_at TIMESTAMPTZ, last_sign_in_at TIMESTAMPTZ, is_blocked BOOLEAN,
+               subject_count INT, attempt_count INT)
+LANGUAGE sql STABLE SECURITY INVOKER SET search_path = '' AS $$
+    SELECT * FROM private.admin_list_accounts();
+$$;
+
+DROP FUNCTION IF EXISTS public.admin_set_password(UUID, TEXT);
+CREATE FUNCTION public.admin_set_password(p_user_id UUID, p_password TEXT)
+RETURNS VOID LANGUAGE sql SECURITY INVOKER SET search_path = '' AS $$
+    SELECT private.admin_set_password(p_user_id, p_password);
+$$;
+
+DROP FUNCTION IF EXISTS public.admin_set_blocked(UUID, BOOLEAN);
+CREATE FUNCTION public.admin_set_blocked(p_user_id UUID, p_blocked BOOLEAN)
+RETURNS VOID LANGUAGE sql SECURITY INVOKER SET search_path = '' AS $$
+    SELECT private.admin_set_blocked(p_user_id, p_blocked);
+$$;
+
+DROP FUNCTION IF EXISTS public.admin_delete_account(UUID);
+CREATE FUNCTION public.admin_delete_account(p_user_id UUID)
+RETURNS VOID LANGUAGE sql SECURITY INVOKER SET search_path = '' AS $$
+    SELECT private.admin_delete_account(p_user_id);
+$$;
+
+DROP FUNCTION IF EXISTS public.admin_transfer_subjects(UUID, UUID);
+CREATE FUNCTION public.admin_transfer_subjects(p_from UUID, p_to UUID)
+RETURNS INT LANGUAGE sql SECURITY INVOKER SET search_path = '' AS $$
+    SELECT private.admin_transfer_subjects(p_from, p_to);
+$$;
+
+DROP FUNCTION IF EXISTS public.admin_get_faculty_code();
+CREATE FUNCTION public.admin_get_faculty_code()
+RETURNS TEXT LANGUAGE sql STABLE SECURITY INVOKER SET search_path = '' AS $$
+    SELECT private.admin_get_faculty_code();
+$$;
+
+DROP FUNCTION IF EXISTS public.admin_new_faculty_code();
+CREATE FUNCTION public.admin_new_faculty_code()
+RETURNS TEXT LANGUAGE sql SECURITY INVOKER SET search_path = '' AS $$
+    SELECT private.admin_new_faculty_code();
+$$;
+
 
 -- ------------------------------------------------------------------------------
 -- 8. PRIVILEGES
@@ -1218,6 +1456,17 @@ GRANT EXECUTE ON FUNCTION public.verify_faculty_code(TEXT) TO anon, authenticate
 GRANT EXECUTE ON FUNCTION public.is_student_id_available(TEXT) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.list_classes() TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.is_subject_taken(UUID, TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.server_time() TO anon, authenticated;
+
+-- Administrator tools: signed-in users only; each function also checks the admin role
+REVOKE ALL ON FUNCTION public.admin_list_accounts(), public.admin_set_password(UUID, TEXT),
+    public.admin_set_blocked(UUID, BOOLEAN), public.admin_delete_account(UUID),
+    public.admin_transfer_subjects(UUID, UUID), public.admin_get_faculty_code(), public.admin_new_faculty_code()
+FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_list_accounts(), public.admin_set_password(UUID, TEXT),
+    public.admin_set_blocked(UUID, BOOLEAN), public.admin_delete_account(UUID),
+    public.admin_transfer_subjects(UUID, UUID), public.admin_get_faculty_code(), public.admin_new_faculty_code()
+TO authenticated;
 
 -- private.*: nobody by default (trigger functions need no grant to fire), then
 -- exactly what RLS policies, the public wrappers and save_quiz call as the user.
@@ -1227,7 +1476,10 @@ GRANT EXECUTE ON FUNCTION
     private.quiz_course_id(UUID), private.quiz_has_attempts(UUID), private.course_has_attempts(UUID),
     private.teaches_student(UUID), private.is_my_teacher(UUID), private.can_view_attempt(UUID),
     private.submit_quiz(UUID, JSONB), private.get_student_attempt_review(UUID),
-    private.create_class(TEXT, INT, TEXT), private.move_students(UUID[], UUID)
+    private.create_class(TEXT, INT, TEXT), private.move_students(UUID[], UUID),
+    private.admin_list_accounts(), private.admin_set_password(UUID, TEXT), private.admin_set_blocked(UUID, BOOLEAN),
+    private.admin_delete_account(UUID), private.admin_transfer_subjects(UUID, UUID),
+    private.admin_get_faculty_code(), private.admin_new_faculty_code()
 TO authenticated;
 GRANT EXECUTE ON FUNCTION
     private.verify_faculty_code(TEXT), private.is_student_id_available(TEXT),

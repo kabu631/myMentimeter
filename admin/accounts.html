@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0F766E">
+  <title>Accounts | Quizora Admin</title>
+  <meta name="description" content="Administrator: manage every teacher and student account.">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="../assets/brand/apple-touch-icon.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="../css/main.css">
+  <link rel="stylesheet" href="../css/components.css">
+  <link rel="stylesheet" href="../css/admin.css">
+
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <header class="app-navbar">
+    <div class="app-container navbar-inner">
+      <a href="index.html" class="navbar-brand">
+        <img src="../assets/brand/quizora-logo.svg" alt="Quizora" class="brand-logo">
+      </a>
+      <nav class="navbar-nav"></nav>
+    </div>
+  </header>
+
+  <main id="main" class="main-content" tabindex="-1">
+    <div class="app-container">
+
+      <section class="page-header">
+        <div>
+          <div class="page-eyebrow">Administration</div>
+          <h1 class="page-title">Accounts</h1>
+          <p class="page-lead">Every teacher and student. Edit details, reset passwords, block sign-in or remove accounts.</p>
+        </div>
+        <button type="button" id="btn-add-account" class="btn btn-primary">+ Add account</button>
+      </section>
+
+      <section class="stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));">
+        <div class="stat-card"><div class="stat-content"><div id="stat-teachers" class="stat-value">–</div><div class="stat-label">Teachers</div></div></div>
+        <div class="stat-card"><div class="stat-content"><div id="stat-students" class="stat-value">–</div><div class="stat-label">Students</div></div></div>
+        <div class="stat-card"><div class="stat-content"><div id="stat-classes" class="stat-value">–</div><div class="stat-label">Classes</div></div></div>
+        <div class="stat-card"><div class="stat-content"><div id="stat-blocked" class="stat-value">–</div><div class="stat-label">Blocked</div></div></div>
+      </section>
+
+      <section class="grid-cards section-block" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+        <div class="card admin-panel">
+          <h2 class="section-title">Faculty sign-up code</h2>
+          <p class="small muted">Teachers enter this when they create their account. Share it only with teachers.</p>
+          <div class="toolbar">
+            <button type="button" id="faculty-code" class="code-chip mono" aria-live="polite" aria-label="Faculty code (select to show or hide)">••••-••••-••••</button>
+            <button type="button" id="btn-copy-code" class="btn btn-outline btn-sm">Copy</button>
+            <button type="button" id="btn-new-code" class="btn btn-secondary btn-sm">Generate new code</button>
+          </div>
+          <p class="small muted" style="margin-bottom: 0;">A new code stops the old one working for new sign-ups. Existing teachers are not affected.</p>
+        </div>
+
+        <form id="form-my-password" class="card admin-panel" novalidate>
+          <h2 class="section-title">My password</h2>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="my-new-password">New password</label>
+              <input id="my-new-password" type="password" class="form-control" minlength="6" autocomplete="new-password" placeholder="At least 6 characters">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="my-confirm-password">Confirm</label>
+              <input id="my-confirm-password" type="password" class="form-control" minlength="6" autocomplete="new-password">
+            </div>
+          </div>
+          <button type="submit" id="btn-my-password" class="btn btn-secondary btn-sm">Change my password</button>
+        </form>
+      </section>
+
+      <section class="section-block">
+        <div class="section-head">
+          <div class="segmented account-tabs" role="tablist" aria-label="Show accounts">
+            <button type="button" class="active" role="tab" aria-selected="true" data-role="all">All</button>
+            <button type="button" role="tab" aria-selected="false" data-role="student">Students</button>
+            <button type="button" role="tab" aria-selected="false" data-role="teacher">Teachers</button>
+            <button type="button" role="tab" aria-selected="false" data-role="admin">Admins</button>
+          </div>
+          <div class="toolbar">
+            <label for="filter-class" class="sr-only">Class</label>
+            <select id="filter-class" class="form-select" style="width: 220px;"></select>
+            <label for="filter-search" class="sr-only">Search accounts</label>
+            <input type="search" id="filter-search" class="form-control" placeholder="Search name, email, roll no..." style="width: 240px;">
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Role</th>
+                <th>Roll No.</th>
+                <th>Class / Subjects</th>
+                <th>Last sign-in</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="accounts-body">
+              <tr><td colspan="7" class="muted" style="text-align: center; padding: 2rem;">Loading accounts...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Edit account -->
+  <div id="edit-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+    <div class="modal-dialog" style="max-width: 560px;">
+      <form id="edit-form" novalidate>
+        <div class="modal-header">
+          <h3 id="edit-modal-title" class="modal-title">Edit account</h3>
+          <button type="button" class="modal-close" data-close aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p id="edit-email" class="small muted"></p>
+          <div class="form-group">
+            <label class="form-label" for="edit-name">Full name</label>
+            <input id="edit-name" class="form-control" maxlength="120" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="edit-role">Role</label>
+            <select id="edit-role" class="form-select">
+              <option value="student">Student</option>
+              <option value="teacher">Teacher</option>
+              <option value="admin">Admin (full control)</option>
+            </select>
+          </div>
+          <div id="edit-student-fields" class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="edit-roll">Roll / Registration No.</label>
+              <input id="edit-roll" class="form-control" maxlength="40" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="edit-class">Class</label>
+              <select id="edit-class" class="form-select"></select>
+            </div>
+          </div>
+          <div id="edit-transfer" class="alert alert-info hidden">
+            <p id="edit-transfer-text" style="margin: 0 0 0.6rem;"></p>
+            <div class="toolbar">
+              <label for="edit-transfer-to" class="sr-only">Move subjects to</label>
+              <select id="edit-transfer-to" class="form-select" style="max-width: 260px;"></select>
+              <button type="button" id="btn-transfer" class="btn btn-secondary btn-sm">Move subjects</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" data-close>Cancel</button>
+          <button type="submit" id="btn-save-edit" class="btn btn-primary">Save changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Reset password -->
+  <div id="password-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="password-modal-title">
+    <div class="modal-dialog" style="max-width: 480px;">
+      <form id="password-form" novalidate>
+        <div class="modal-header">
+          <h3 id="password-modal-title" class="modal-title">Reset password</h3>
+          <button type="button" class="modal-close" data-close aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p id="password-for" class="small"></p>
+          <div class="form-group">
+            <label class="form-label" for="reset-password">New password</label>
+            <div class="toolbar" style="flex-wrap: nowrap;">
+              <input id="reset-password" class="form-control mono" minlength="6" autocomplete="off" spellcheck="false">
+              <button type="button" id="btn-generate-password" class="btn btn-outline btn-sm">Generate</button>
+            </div>
+            <span class="input-hint">They can sign in with it straight away. Ask them to change it afterwards.</span>
+          </div>
+          <div id="password-done" class="alert alert-success hidden" role="status"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" data-close>Close</button>
+          <button type="submit" id="btn-set-password" class="btn btn-primary">Set password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add account -->
+  <div id="add-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="add-modal-title">
+    <div class="modal-dialog" style="max-width: 560px;">
+      <form id="add-form" novalidate>
+        <div class="modal-header">
+          <h3 id="add-modal-title" class="modal-title">Add account</h3>
+          <button type="button" class="modal-close" data-close aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="add-role">Account type</label>
+            <select id="add-role" class="form-select">
+              <option value="student">Student</option>
+              <option value="teacher">Teacher</option>
+              <option value="admin">Admin (full control)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="add-name">Full name</label>
+            <input id="add-name" class="form-control" maxlength="120" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="add-email">Email (their sign-in ID)</label>
+            <input id="add-email" type="email" class="form-control" autocomplete="off" placeholder="name@college.edu">
+          </div>
+          <div id="add-student-fields" class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="add-roll">Roll / Registration No.</label>
+              <input id="add-roll" class="form-control" maxlength="40" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="add-class">Class</label>
+              <select id="add-class" class="form-select"></select>
+            </div>
+          </div>
+          <p id="add-teacher-note" class="small muted hidden">Teachers add their own subjects after signing in (Subjects → + Add Subject).</p>
+          <div class="form-group">
+            <label class="form-label" for="add-password">Password</label>
+            <div class="toolbar" style="flex-wrap: nowrap;">
+              <input id="add-password" class="form-control mono" minlength="6" autocomplete="off" spellcheck="false">
+              <button type="button" id="btn-generate-add" class="btn btn-outline btn-sm">Generate</button>
+            </div>
+          </div>
+          <div id="add-done" class="alert alert-success hidden" role="status"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" data-close>Close</button>
+          <button type="submit" id="btn-create-account" class="btn btn-primary">Create account</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <footer class="app-footer">
+    <div class="app-container footer-inner">
+      <div>Quizora &copy; 2026 &bull; Administration</div>
+      <div>Graded securely in the database</div>
+    </div>
+  </footer>
+
+  <script type="module" src="../js/admin-accounts.js"></script>
+</body>
+</html>

@@ -107,6 +107,43 @@ export function todayIso() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
+// ------------------------------------------------------------------------------
+// Clock: the device time corrected to the database clock (see syncServerClock
+// in supabase.js), so countdowns agree even when a phone's clock is off.
+// ------------------------------------------------------------------------------
+
+let clockOffsetMs = 0;
+export function setClockOffset(ms) { clockOffsetMs = Number(ms) || 0; }
+export function nowMs() { return Date.now() + clockOffsetMs; }
+
+/** 425 -> "7:05", 3725 -> "1:02:05" */
+export function fmtCountdown(totalSeconds) {
+  const t = Math.max(0, Math.round(totalSeconds));
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/**
+ * Keep every [data-closes-at] countdown on the page ticking ("Closes in 7:05").
+ * Calls onExpire once when any of them reaches zero (e.g. to reload the list).
+ */
+export function startCountdowns(root = document, onExpire = null) {
+  let fired = false;
+  const tick = () => {
+    root.querySelectorAll('[data-closes-at]').forEach(el => {
+      const left = (new Date(el.dataset.closesAt).getTime() - nowMs()) / 1000;
+      el.textContent = left > 0 ? `${el.dataset.prefix ?? 'Closes in '}${fmtCountdown(left)}` : 'Time is up';
+      el.classList.toggle('is-urgent', left > 0 && left <= 60);
+      if (left <= 0 && onExpire && !fired) {
+        fired = true;
+        setTimeout(onExpire, 1500);
+      }
+    });
+  };
+  tick();
+  return setInterval(tick, 1000);
+}
+
 /** Timestamp -> value for <input type="datetime-local"> (local time). */
 export function toLocalInput(ts) {
   if (!ts) return '';
@@ -123,7 +160,7 @@ export function fromLocalInput(value) {
 // Quiz state (mirrors public.quiz_is_closed in sql/setup.sql)
 // ------------------------------------------------------------------------------
 
-export function isQuizClosed(quiz, now = Date.now()) {
+export function isQuizClosed(quiz, now = nowMs()) {
   if (!quiz) return false;
   return quiz.status === 'closed' || Boolean(quiz.closes_at && new Date(quiz.closes_at).getTime() < now);
 }

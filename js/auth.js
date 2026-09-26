@@ -289,7 +289,8 @@ export function renderNavbar(profile) {
         ['admin/index.html', 'Subjects'],
         ['admin/quizzes.html', 'Quizzes'],
         ['admin/students.html', 'Students'],
-        ['admin/results.html', 'Gradebook']
+        ['admin/results.html', 'Gradebook'],
+        ...(profile.role === 'admin' ? [['admin/accounts.html', 'Accounts']] : [])
       ]
     : [
         ['dashboard.html', 'Dashboard'],
