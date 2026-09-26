@@ -15,7 +15,7 @@ export const APP_CONFIG = {
   SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlaHVmYXJsZHJiYXZuZ3BlZnVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3NzI3NjAsImV4cCI6MjEwNTM0ODc2MH0.0Bnb-MR_m68gzsLTeiNAz0rZcdWmgbQ_Cq6z49naDLA',
 
   // 2. Branding (shown in the header, footer and sign-in pages)
-  APP_NAME: 'DailyClassQuiz',
+  APP_NAME: 'Quizora',
   INSTITUTION_NAME: 'College Daily Quiz Portal',
 
   // 3. UI Helpers

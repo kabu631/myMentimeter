@@ -1,5 +1,5 @@
 {
-  "name": "daily-college-quiz-system",
+  "name": "quizora",
   "version": "1.0.0",
   "description": "Free multi-teacher, multi-course daily class quiz portal (GitHub Pages + Supabase)",
   "scripts": {

@@ -1,4 +1,4 @@
-# DailyClassQuiz
+# Quizora
 
 A free quiz portal for the end of every class. Teachers publish a short multiple-choice quiz when the lecture
 finishes, students answer on their phone and see their score straight away, and each student's semester marks
@@ -93,7 +93,7 @@ to set a temporary one immediately.
 
 ## Design
 
-The look and feel follows [design-system/dailyclassquiz/MASTER.md](design-system/dailyclassquiz/MASTER.md),
+The look and feel follows [design-system/quizora/MASTER.md](design-system/quizora/MASTER.md),
 generated with the [UI/UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) skill and then
 checked by hand. It uses the Minimalism style with a teal and orange palette (every text color meets WCAG
 AA contrast) and the Plus Jakarta Sans font. All color, spacing and radius values are defined as variables in

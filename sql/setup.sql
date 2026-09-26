@@ -1,5 +1,5 @@
 -- ==============================================================================
--- DailyClassQuiz — complete database setup (multi-teacher, multi-course)
+-- Quizora — complete database setup (multi-teacher, multi-course)
 -- ==============================================================================
 -- Paste this whole file into Supabase → SQL Editor → Run.
 --

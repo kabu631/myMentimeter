@@ -1,12 +1,12 @@
 # Design System Master File
 
-> **LOGIC:** When building a specific page, first check `design-system/dailyclassquiz/pages/[page-name].md`.
+> **LOGIC:** When building a specific page, first check `design-system/quizora/pages/[page-name].md`.
 > If that file exists, its rules **override** this Master file. If not, follow the rules below.
 > The implemented tokens live in `css/main.css` — keep this file and that file in sync.
 
 ---
 
-**Project:** DailyClassQuiz
+**Project:** Quizora
 **Source:** UI/UX Pro Max skill (`search.py "online course e-learning academic assessment" --design-system --variance 4 --motion 3 --density 6`), then verified and adjusted as noted below.
 **Category:** Online Course / E-learning (student side) + Education Dashboard (teacher side)
 **Audience:** College students on phones right after class; teachers on laptops.

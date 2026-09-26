@@ -57,7 +57,7 @@ async function initQuizEngine() {
 
     currentQuiz = quiz;
     currentCourse = quiz.courses;
-    document.title = `${quiz.title} | DailyClassQuiz`;
+    document.title = `${quiz.title} | Quizora`;
 
     const { data: existingAttempt, error: attErr } = await supabase
       .from('quiz_attempts')

@@ -50,5 +50,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Daily Class Quiz server running at http://localhost:${PORT}/`);
+  console.log(`Quizora server running at http://localhost:${PORT}/`);
 });
