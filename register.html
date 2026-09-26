@@ -22,13 +22,7 @@
   <header class="app-navbar">
     <div class="app-container navbar-inner">
       <a href="index.html" class="navbar-brand">
-        <div class="brand-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
-          </svg>
-        </div>
-        <span>Quizora</span>
+        <img src="assets/brand/quizora-logo.svg" alt="Quizora" class="brand-logo">
       </a>
       <div class="navbar-nav">
         <a href="login.html" class="nav-link">Sign In</a>
@@ -38,16 +32,12 @@
 
   <main id="main" class="main-content" tabindex="-1">
     <div class="auth-wrapper">
-      <div class="auth-card">
+      <div class="auth-card auth-card-wide">
 
         <div class="auth-header">
-          <div class="auth-logo">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>
-            </svg>
-          </div>
+          <img src="assets/brand/quizora-mark.svg" alt="" class="auth-brand-mark">
           <h1 class="auth-title">Create your account</h1>
-          <p id="register-subtitle" class="auth-subtitle">Register once, then join each of your courses with its code</p>
+          <p id="register-subtitle" class="auth-subtitle">Choose your class once, and quizzes from all its subjects appear on your dashboard</p>
         </div>
 
         <div class="segmented" role="tablist" aria-label="Account type">
@@ -63,21 +53,35 @@
             <input type="text" id="reg-fullname" class="form-control" placeholder="e.g. Sita Sharma" required autocomplete="name">
           </div>
 
-          <div class="form-row student-only">
+          <!-- Student: roll number + class -->
+          <div class="student-only">
             <div class="form-group">
               <label class="form-label" for="reg-student-id">Roll / Registration No.</label>
-              <input type="text" id="reg-student-id" class="form-control" placeholder="e.g. CS-2026-042" autocomplete="off">
+              <input type="text" id="reg-student-id" class="form-control" placeholder="e.g. BBA-2026-042" autocomplete="off">
             </div>
             <div class="form-group">
-              <label class="form-label" for="reg-section">Section <span class="muted">(optional)</span></label>
-              <input type="text" id="reg-section" class="form-control" placeholder="e.g. A">
+              <label class="form-label" for="reg-class">Your class</label>
+              <select id="reg-class" class="form-select" aria-describedby="reg-class-hint">
+                <option value="" selected disabled>Loading classes…</option>
+              </select>
+              <span id="reg-class-hint" class="input-hint">You'll be enrolled in every subject of this class automatically.</span>
             </div>
           </div>
 
-          <div class="form-group teacher-only hidden">
-            <label class="form-label" for="reg-faculty-code">Faculty Sign-up Code</label>
-            <input type="text" id="reg-faculty-code" class="form-control mono" placeholder="XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
-            <span class="input-hint">Ask your administrator. This keeps student accounts from registering as teachers.</span>
+          <!-- Teacher: faculty code + the subjects they teach -->
+          <div class="teacher-only hidden">
+            <div class="form-group">
+              <label class="form-label" for="reg-faculty-code">Faculty Sign-up Code</label>
+              <input type="text" id="reg-faculty-code" class="form-control mono" placeholder="XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
+              <span class="input-hint">Ask your administrator. This keeps student accounts from registering as teachers.</span>
+            </div>
+
+            <fieldset class="subjects-fieldset">
+              <legend class="form-label">Subjects you teach</legend>
+              <p class="input-hint">Add the class and subject for each one, such as BBA · 1st Semester — Computer Applications. You can add more later.</p>
+              <div id="subject-rows" class="subject-rows"></div>
+              <button type="button" id="btn-add-subject" class="btn btn-outline btn-sm">+ Add another subject</button>
+            </fieldset>
           </div>
 
           <div class="form-group">
@@ -114,83 +118,177 @@
   <script type="module">
     import { registerUser, getUserProfile, homeUrlFor } from './js/auth.js';
     import { showToast } from './js/supabase.js';
-    import { setBusy, showFieldError, clearFieldErrors } from './js/utils.js';
+    import { setBusy, showFieldError, clearFieldErrors, friendlyError, ICONS } from './js/utils.js';
+    import { fetchClasses, classOptionsHtml, classPickerHtml, bindClassPicker, readClassPicker } from './js/classes.js';
+
+    const $ = (id) => document.getElementById(id);
+    const params = new URLSearchParams(window.location.search);
 
     getUserProfile().then(profile => {
       if (profile) window.location.replace(homeUrlFor(profile));
     });
 
-    let accountType = new URLSearchParams(window.location.search).get('as') === 'teacher' ? 'teacher' : 'student';
+    let accountType = params.get('as') === 'teacher' ? 'teacher' : 'student';
+    let classes = [];
+    let rowSeq = 0;
 
     function applyAccountType() {
       const teacher = accountType === 'teacher';
-      document.getElementById('type-student').classList.toggle('active', !teacher);
-      document.getElementById('type-teacher').classList.toggle('active', teacher);
-      document.getElementById('type-student').setAttribute('aria-selected', String(!teacher));
-      document.getElementById('type-teacher').setAttribute('aria-selected', String(teacher));
+      $('type-student').classList.toggle('active', !teacher);
+      $('type-teacher').classList.toggle('active', teacher);
+      $('type-student').setAttribute('aria-selected', String(!teacher));
+      $('type-teacher').setAttribute('aria-selected', String(teacher));
       document.querySelectorAll('.student-only').forEach(el => el.classList.toggle('hidden', teacher));
       document.querySelectorAll('.teacher-only').forEach(el => el.classList.toggle('hidden', !teacher));
-      document.getElementById('register-subtitle').textContent = teacher
-        ? 'Create courses, publish quizzes and track semester marks'
-        : 'Register once, then join each of your courses with its code';
+      $('register-subtitle').textContent = teacher
+        ? 'Tell us which subjects you teach in which class. Students of that class see your quizzes automatically.'
+        : 'Choose your class once, and quizzes from all its subjects appear on your dashboard';
     }
 
-    document.getElementById('type-student').addEventListener('click', () => { accountType = 'student'; applyAccountType(); });
-    document.getElementById('type-teacher').addEventListener('click', () => { accountType = 'teacher'; applyAccountType(); });
+    $('type-student').addEventListener('click', () => { accountType = 'student'; applyAccountType(); });
+    $('type-teacher').addEventListener('click', () => { accountType = 'teacher'; applyAccountType(); });
     applyAccountType();
 
-    const passwordInput = document.getElementById('reg-password');
-    const toggleBtn = document.getElementById('toggle-password-btn');
+    // ---------------------------------------------------------------- classes
+    function showAlert(message, type = 'danger') {
+      const box = $('register-alert');
+      box.className = `alert alert-${type}`;
+      box.textContent = message;
+      box.style.display = 'block';
+      box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    async function loadClasses() {
+      const select = $('reg-class');
+      try {
+        classes = await fetchClasses();
+      } catch (err) {
+        classes = [];
+        select.innerHTML = '<option value="" selected disabled>Classes could not be loaded</option>';
+        showAlert(friendlyError(err));
+      }
+
+      // Students can only join a class that already has subjects
+      const open = classes.filter(c => c.subject_count > 0);
+      if (open.length === 0) {
+        select.innerHTML = '<option value="" selected disabled>No classes are open for sign-up yet</option>';
+        $('reg-class-hint').textContent = 'Your teachers create the classes when they register. Ask them, then try again.';
+      } else {
+        const wanted = open.some(c => c.id === params.get('class')) ? params.get('class') : '';
+        select.innerHTML = classOptionsHtml(open, { selected: wanted, withCounts: true });
+      }
+
+      $('subject-rows').innerHTML = '';
+      addSubjectRow();
+    }
+
+    // ---------------------------------------------------------------- teacher subject rows
+    function addSubjectRow() {
+      const prefix = `sr${++rowSeq}`;
+      const row = document.createElement('div');
+      row.className = 'subject-row';
+      row.dataset.prefix = prefix;
+      row.innerHTML = `
+        <div class="subject-row-head">
+          <span class="subject-row-title"></span>
+          <button type="button" class="icon-btn" data-remove-row>${ICONS.x}</button>
+        </div>
+        ${classPickerHtml(prefix, classes, { label: 'Class' })}
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="${prefix}-name">Subject name</label>
+            <input id="${prefix}-name" class="form-control" placeholder="e.g. Computer Applications" maxlength="120" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="${prefix}-code">Subject code <span class="muted">(optional)</span></label>
+            <input id="${prefix}-code" class="form-control" placeholder="e.g. BBA-105" maxlength="30" autocomplete="off">
+          </div>
+        </div>`;
+      $('subject-rows').appendChild(row);
+      bindClassPicker(row, prefix);
+      row.querySelector('[data-remove-row]').addEventListener('click', () => {
+        row.remove();
+        renumberRows();
+      });
+      renumberRows();
+      return row;
+    }
+
+    function renumberRows() {
+      const rows = [...document.querySelectorAll('.subject-row')];
+      rows.forEach((row, i) => {
+        row.querySelector('.subject-row-title').textContent = `Subject ${i + 1}`;
+        const btn = row.querySelector('[data-remove-row]');
+        btn.setAttribute('aria-label', `Remove subject ${i + 1}`);
+        btn.classList.toggle('hidden', rows.length === 1);
+      });
+    }
+
+    $('btn-add-subject').addEventListener('click', () => {
+      const row = addSubjectRow();
+      row.querySelector('select').focus();
+    });
+
+    loadClasses();
+
+    // ---------------------------------------------------------------- password + submit
+    const passwordInput = $('reg-password');
+    const toggleBtn = $('toggle-password-btn');
     toggleBtn.addEventListener('click', () => {
       const show = passwordInput.type === 'password';
       passwordInput.type = show ? 'text' : 'password';
       toggleBtn.textContent = show ? 'Hide' : 'Show';
     });
 
-    const form = document.getElementById('form-register');
-    const alertBox = document.getElementById('register-alert');
+    const form = $('form-register');
+    const FIELD_IDS = {
+      fullName: 'reg-fullname', studentId: 'reg-student-id', classId: 'reg-class', email: 'reg-email',
+      password: 'reg-password', facultyCode: 'reg-faculty-code'
+    };
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const submitBtn = document.getElementById('btn-submit-register');
-      alertBox.style.display = 'none';
+      const submitBtn = $('btn-submit-register');
+      $('register-alert').style.display = 'none';
       clearFieldErrors(form);
+
+      const subjects = [...document.querySelectorAll('.subject-row')].map(row => {
+        const p = row.dataset.prefix;
+        return {
+          prefix: p,
+          classChoice: readClassPicker(row, p),
+          name: $(`${p}-name`).value,
+          code: $(`${p}-code`).value
+        };
+      });
 
       setBusy(submitBtn, true, 'Creating account...');
       const result = await registerUser({
         accountType,
-        fullName: document.getElementById('reg-fullname').value,
-        studentId: document.getElementById('reg-student-id').value,
-        section: document.getElementById('reg-section').value,
-        facultyCode: document.getElementById('reg-faculty-code').value,
-        email: document.getElementById('reg-email').value,
+        fullName: $('reg-fullname').value,
+        studentId: $('reg-student-id').value,
+        classId: $('reg-class').value,
+        facultyCode: $('reg-faculty-code').value,
+        subjects,
+        email: $('reg-email').value,
         password: passwordInput.value
       });
 
       if (!result.success) {
         setBusy(submitBtn, false);
-        const fieldId = {
-          fullName: 'reg-fullname', studentId: 'reg-student-id', email: 'reg-email',
-          password: 'reg-password', facultyCode: 'reg-faculty-code'
-        }[result.field];
-        if (fieldId) {
-          showFieldError(document.getElementById(fieldId), result.error);
+        const field = result.field && $(FIELD_IDS[result.field] || result.field);
+        if (field) {
+          showFieldError(field, result.error);
           return;
         }
-        alertBox.className = 'alert alert-danger';
-        alertBox.textContent = result.error;
-        alertBox.style.display = 'block';
-        alertBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        showAlert(result.error);
         return;
       }
 
       if (result.needsConfirmation) {
         form.reset();
         setBusy(submitBtn, false);
-        alertBox.className = 'alert alert-success';
-        alertBox.textContent = 'Account created! We sent you a confirmation email — click the link in it, then sign in.';
-        alertBox.style.display = 'block';
-        alertBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        showAlert('Account created! We sent you a confirmation email — click the link in it, then sign in.', 'success');
         return;
       }
 

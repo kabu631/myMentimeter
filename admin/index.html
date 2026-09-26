@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0F766E">
-  <title>My Courses | Teacher Console</title>
-  <meta name="description" content="Manage your courses, join codes and open quizzes.">
+  <title>My Subjects | Teacher Console</title>
+  <meta name="description" content="The subjects you teach, grouped by class, and quizzes that are open right now.">
   <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,13 +22,7 @@
   <header class="app-navbar">
     <div class="app-container navbar-inner">
       <a href="index.html" class="navbar-brand">
-        <div class="brand-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
-          </svg>
-        </div>
-        <span>Quizora</span>
+        <img src="../assets/brand/quizora-logo.svg" alt="Quizora" class="brand-logo">
       </a>
       <nav class="navbar-nav"></nav>
     </div>
@@ -41,14 +35,14 @@
         <div>
           <div class="page-eyebrow">Teacher Console</div>
           <h1 class="page-title">Welcome, <span id="teacher-name">Teacher</span></h1>
-          <p class="page-lead">Your courses, their join codes, and quizzes that are open right now.</p>
+          <p class="page-lead">The subjects you teach, grouped by class, and quizzes that are open right now.</p>
         </div>
-        <button id="btn-new-course" class="btn btn-primary">+ New Course</button>
+        <button id="btn-new-course" class="btn btn-primary">+ Add Subject</button>
       </section>
 
       <section class="stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));">
-        <div class="stat-card"><div class="stat-content"><div id="metric-courses" class="stat-value">–</div><div class="stat-label">Active Courses</div></div></div>
-        <div class="stat-card"><div class="stat-content"><div id="metric-students" class="stat-value">–</div><div class="stat-label">Enrolled Students</div></div></div>
+        <div class="stat-card"><div class="stat-content"><div id="metric-courses" class="stat-value">–</div><div class="stat-label">Active Subjects</div></div></div>
+        <div class="stat-card"><div class="stat-content"><div id="metric-students" class="stat-value">–</div><div class="stat-label">Students Taught</div></div></div>
         <div class="stat-card"><div class="stat-content"><div id="metric-quizzes" class="stat-value">–</div><div class="stat-label">Quizzes Held</div></div></div>
         <div class="stat-card"><div class="stat-content"><div id="metric-open" class="stat-value text-success">–</div><div class="stat-label">Open Right Now</div></div></div>
       </section>
@@ -63,55 +57,52 @@
 
       <section class="section-block">
         <div class="section-head">
-          <h2 class="section-title">My Courses</h2>
+          <h2 class="section-title">My Subjects</h2>
           <label class="form-check small"><input type="checkbox" id="show-archived"> Show archived</label>
         </div>
-        <div id="courses-grid" class="grid-cards">
-          <div class="card muted">Loading courses...</div>
+        <div id="courses-grid">
+          <div class="card muted">Loading subjects...</div>
         </div>
       </section>
 
       <section id="how-it-works" class="card section-block hidden">
         <h2 class="section-title" style="margin-bottom: 0.75rem;">How it works</h2>
         <ol style="padding-left: 1.25rem; color: var(--text-secondary); display: grid; gap: 0.4rem;">
-          <li><strong>Create a course</strong> for each subject / section you teach. Each gets its own join code.</li>
-          <li><strong>Share the join code</strong>. Students register, then enter the code on their dashboard.</li>
+          <li><strong>Add each subject you teach</strong> with its class, for example BBA · 1st Semester — Computer Applications.</li>
+          <li><strong>Students choose their class when they register</strong> and are enrolled in all of its subjects automatically. Share the sign-up link from the <a href="students.html">Students</a> page.</li>
           <li><strong>After each class, publish a quiz</strong>. Students answer and see their score immediately.</li>
           <li><strong>Close the quiz</strong> when time is up (or set an automatic close time). Students who missed it score zero.</li>
-          <li><strong>End of semester:</strong> the Gradebook totals every student's marks, scaled to your weight, ready to export as CSV.</li>
+          <li><strong>End of semester:</strong> export the Gradebook, then move the class to its next semester from the Students page. Marks already earned stay on every student's report.</li>
         </ol>
       </section>
 
     </div>
   </main>
 
-  <!-- Create / edit course -->
+  <!-- Add / edit subject -->
   <div id="course-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="course-modal-title">
     <div class="modal-dialog" style="max-width: 600px;">
-      <form id="course-form">
+      <form id="course-form" novalidate>
         <div class="modal-header">
-          <h3 id="course-modal-title" class="modal-title">New Course</h3>
+          <h3 id="course-modal-title" class="modal-title">Add Subject</h3>
           <button type="button" class="modal-close" data-close aria-label="Close">&times;</button>
         </div>
         <div class="modal-body">
+          <div id="course-class-picker"></div>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label" for="course-code">Course code *</label>
-              <input id="course-code" class="form-control" placeholder="e.g. CS-301" required maxlength="30">
+              <label class="form-label" for="course-name">Subject name *</label>
+              <input id="course-name" class="form-control" placeholder="e.g. Computer Applications" maxlength="120" autocomplete="off">
             </div>
             <div class="form-group">
-              <label class="form-label" for="course-section">Section</label>
-              <input id="course-section" class="form-control" placeholder="e.g. A" maxlength="30">
+              <label class="form-label" for="course-code">Subject code <span class="muted">(optional)</span></label>
+              <input id="course-code" class="form-control" placeholder="e.g. BBA-105" maxlength="30" autocomplete="off">
             </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="course-name">Course / subject name *</label>
-            <input id="course-name" class="form-control" placeholder="e.g. Database Management Systems" required maxlength="120">
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label" for="course-term">Semester / term</label>
-              <input id="course-term" class="form-control" placeholder="e.g. Spring 2026" maxlength="40">
+              <label class="form-label" for="course-term">Academic session <span class="muted">(optional)</span></label>
+              <input id="course-term" class="form-control" placeholder="e.g. 2026" maxlength="40">
             </div>
             <div class="form-group">
               <label class="form-label" for="course-classes">Planned classes</label>
@@ -125,25 +116,17 @@
           </div>
 
           <div id="course-edit-extras" class="hidden">
-            <div class="form-group">
-              <span class="form-label">Join code</span>
-              <div class="toolbar">
-                <span id="course-join-code" class="join-code"></span>
-                <button type="button" id="btn-regenerate-code" class="btn btn-outline btn-sm">Generate new code</button>
-              </div>
-              <span class="input-hint">A new code stops the old one from working. Students already enrolled stay enrolled.</span>
-            </div>
             <label class="form-check">
               <input type="checkbox" id="course-archived">
-              <span><strong>Archive this course</strong> — hides it from active lists and stops new students joining. Marks are kept.</span>
+              <span><strong>Archive this subject</strong> — use at the end of the semester. It leaves active lists and new students of the class aren't added. Marks are kept.</span>
             </label>
           </div>
         </div>
         <div class="modal-footer" style="justify-content: space-between;">
-          <button type="button" id="btn-delete-course" class="btn btn-danger-outline hidden">Delete course</button>
+          <button type="button" id="btn-delete-course" class="btn btn-danger-outline hidden">Delete subject</button>
           <div class="toolbar" style="margin-left: auto;">
             <button type="button" class="btn btn-outline" data-close>Cancel</button>
-            <button type="submit" id="btn-save-course" class="btn btn-primary">Save course</button>
+            <button type="submit" id="btn-save-course" class="btn btn-primary">Save subject</button>
           </div>
         </div>
       </form>

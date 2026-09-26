@@ -2,18 +2,20 @@
  * ==============================================================================
  * js/dashboard.js - Student Dashboard Controller
  * ==============================================================================
- * 1. Identity header and headline stats
- * 2. Open quizzes across every enrolled course (start, or see submitted score)
- * 3. Course cards with running semester marks, plus "join course by code"
+ * 1. Identity header (roll number, class) and headline stats
+ * 2. Open quizzes across every subject of the student's class
+ * 3. Subject cards with running semester marks (or a class picker if the
+ *    student has no class yet)
  * 4. Five most recent results
  */
 
 import { getSupabase, showToast } from './supabase.js';
-import { requireAuth } from './auth.js';
+import { requireAuth, renderNavbar } from './auth.js';
 import { loadStudentData, overallAverage } from './student-data.js';
+import { fetchClasses, classOptionsHtml } from './classes.js';
 import {
-  escapeHtml, fmtNum, fmtPct, fmtDate, fmtDateTime, classLabel, percentOf, pctBadgeClass,
-  isQuizOpen, isScoreVisible, emptyState, setBusy, friendlyError, ICONS
+  escapeHtml, fmtNum, fmtPct, fmtDate, fmtDateTime, classLabel, classTitle, classChip, courseTag,
+  percentOf, pctBadgeClass, isQuizOpen, isScoreVisible, emptyState, setBusy, friendlyError, ICONS
 } from './utils.js';
 
 let currentUser = null;
@@ -23,21 +25,24 @@ async function initStudentDashboard() {
   if (!currentUser) return;
 
   document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = ICONS[el.dataset.icon]; });
+  renderIdentity();
+  await loadDashboard();
+}
+
+function renderIdentity() {
   document.getElementById('student-name').textContent = currentUser.full_name || 'Student';
   document.getElementById('student-meta').textContent = [
     currentUser.student_id && `Roll No: ${currentUser.student_id}`,
-    currentUser.section && `Section: ${currentUser.section}`,
     currentUser.email
   ].filter(Boolean).join('  ·  ');
-
-  document.getElementById('join-form').addEventListener('submit', handleJoin);
-
-  await loadDashboard();
+  document.getElementById('student-class').innerHTML = currentUser.class
+    ? classChip(currentUser.class, { large: true })
+    : '<span class="badge badge-warning">No class chosen yet</span>';
 }
 
 async function loadDashboard() {
   try {
-    const data = await loadStudentData(currentUser.id);
+    const data = await loadStudentData(currentUser);
     renderStats(data);
     renderOpenQuizzes(data);
     renderCourses(data);
@@ -54,7 +59,7 @@ function renderStats({ courses, summaries }) {
   summaries.forEach(s => { attempted += s.attempted; counted += s.counted; });
   const avg = overallAverage(summaries);
 
-  document.getElementById('stat-courses').textContent = courses.filter(c => !c.is_archived).length;
+  document.getElementById('stat-courses').textContent = courses.filter(c => c.is_current).length;
   document.getElementById('stat-taken').textContent = `${attempted} / ${counted}`;
   document.getElementById('stat-average').textContent = avg === null ? '–' : fmtPct(avg);
 }
@@ -68,7 +73,7 @@ function renderOpenQuizzes({ quizzes, courseById, attemptByQuiz }) {
 
   if (open.length === 0) {
     container.innerHTML = `<div class="card">${emptyState('clock', 'No open quizzes right now',
-      'When your teacher publishes a quiz after class, it will show up here.')}</div>`;
+      'When one of your teachers publishes a quiz after class, it will show up here.')}</div>`;
     return;
   }
 
@@ -76,6 +81,7 @@ function renderOpenQuizzes({ quizzes, courseById, attemptByQuiz }) {
     const course = courseById.get(quiz.course_id);
     const attempt = attemptByQuiz.get(quiz.id);
     const meta = [
+      course?.teacher?.full_name,
       `${quiz.question_count} question${quiz.question_count === 1 ? '' : 's'}`,
       `${fmtNum(quiz.total_marks)} marks`,
       quiz.time_limit_minutes ? `${quiz.time_limit_minutes} min limit` : 'Untimed',
@@ -101,7 +107,7 @@ function renderOpenQuizzes({ quizzes, courseById, attemptByQuiz }) {
       <div class="card quiz-tile ${attempt ? 'is-done' : ''}">
         <div style="flex: 1; min-width: 240px;">
           <div class="toolbar" style="gap: 0.5rem;">
-            <span class="badge badge-primary">${escapeHtml(course?.code || '')}</span>
+            <span class="badge badge-primary">${escapeHtml(courseTag(course))}</span>
             <span class="badge ${attempt ? 'badge-published' : 'badge-warning'}">${attempt ? 'Completed' : 'Available now'}</span>
             <span class="small muted">${classLabel(quiz.class_number)} · ${fmtDate(quiz.scheduled_date)}</span>
           </div>
@@ -117,10 +123,13 @@ function renderOpenQuizzes({ quizzes, courseById, attemptByQuiz }) {
 
 function renderCourses({ courses, summaries }) {
   const grid = document.getElementById('courses-grid');
+  renderClassPicker();
 
   if (courses.length === 0) {
-    grid.innerHTML = `<div class="card" style="grid-column: 1 / -1;">${emptyState('key', 'Join your first course',
-      'Ask your teacher for the course code, type it in the box above and press "Join Course".')}</div>`;
+    grid.innerHTML = currentUser.class
+      ? `<div class="card" style="grid-column: 1 / -1;">${emptyState('book', 'No subjects yet',
+          `Your teachers haven't added subjects to ${classTitle(currentUser.class)} yet. They will appear here automatically.`)}</div>`
+      : '';
     return;
   }
 
@@ -130,15 +139,19 @@ function renderCourses({ courses, summaries }) {
     const weighted = s.weighted !== null && hasMarks
       ? `${fmtNum(s.weighted)} / ${fmtNum(course.final_weight)}`
       : null;
+    const flag = course.is_archived ? ' · Archived' : !course.is_current ? ' · Earlier class' : '';
+    const meta = [
+      course.teacher?.full_name,
+      !course.is_current && course.class ? classTitle(course.class) : null,
+      course.term
+    ].filter(Boolean).join(' · ');
 
     return `
-      <div class="card course-card ${course.is_archived ? 'is-archived' : ''}">
+      <div class="card course-card ${course.is_current ? '' : 'is-archived'}">
         <div>
-          <div class="course-card-code">${escapeHtml(course.code)}${course.is_archived ? ' · Archived' : ''}</div>
+          <div class="course-card-code">${escapeHtml(course.code || 'Subject')}${flag}</div>
           <h3 class="course-card-name">${escapeHtml(course.name)}</h3>
-          <div class="course-card-meta">
-            ${escapeHtml([course.teacher?.full_name, course.section && `Section ${course.section}`, course.term].filter(Boolean).join(' · '))}
-          </div>
+          <div class="course-card-meta">${escapeHtml(meta)}</div>
         </div>
         <div class="mini-stats">
           <div>
@@ -177,6 +190,70 @@ function courseProgress(s) {
     </div>`;
 }
 
+/** Students without a class (e.g. accounts from before classes existed) choose one here. */
+async function renderClassPicker() {
+  const box = document.getElementById('choose-class');
+  box.classList.toggle('hidden', Boolean(currentUser.class_id));
+  if (currentUser.class_id) return;
+
+  box.innerHTML = '<div class="card muted">Loading classes...</div>';
+  let classes = [];
+  try {
+    classes = (await fetchClasses()).filter(c => c.subject_count > 0);
+  } catch (err) {
+    box.innerHTML = `<div class="alert alert-danger">${escapeHtml(friendlyError(err))}</div>`;
+    return;
+  }
+
+  box.innerHTML = `
+    <div class="card section-block">
+      ${emptyState('users', 'Choose your class',
+        classes.length
+          ? 'Pick the class you study in. You will be enrolled in all of its subjects automatically.'
+          : 'No classes are open yet. Your teachers create them when they register — check back soon.')}
+      ${classes.length ? `
+        <form id="choose-class-form" class="toolbar" style="justify-content: center;">
+          <label for="choose-class-select" class="sr-only">Your class</label>
+          <select id="choose-class-select" class="form-select" style="max-width: 360px;">
+            ${classOptionsHtml(classes, { withCounts: true })}
+          </select>
+          <button type="submit" id="btn-choose-class" class="btn btn-primary">Save my class</button>
+        </form>` : ''}
+    </div>`;
+
+  document.getElementById('choose-class-form')?.addEventListener('submit', saveClass);
+}
+
+async function saveClass(e) {
+  e.preventDefault();
+  const select = document.getElementById('choose-class-select');
+  const btn = document.getElementById('btn-choose-class');
+  if (!select.value) {
+    select.focus();
+    showToast('Choose your class first.', 'warning');
+    return;
+  }
+
+  setBusy(btn, true);
+  const { data, error } = await getSupabase()
+    .from('profiles')
+    .update({ class_id: select.value })
+    .eq('id', currentUser.id)
+    .select('*, class:classes(id, program, semester, section)')
+    .single();
+  setBusy(btn, false);
+
+  if (error) {
+    showToast(friendlyError(error), 'danger');
+    return;
+  }
+  currentUser = data;
+  renderIdentity();
+  renderNavbar(currentUser);
+  showToast(`You're in ${classTitle(currentUser.class)}. Your subjects are ready.`, 'success');
+  await loadDashboard();
+}
+
 function renderRecentResults({ attempts, quizById, courseById }) {
   const tbody = document.getElementById('recent-results-body');
   const recent = attempts.filter(a => quizById.has(a.quiz_id)).slice(0, 5);
@@ -193,7 +270,7 @@ function renderRecentResults({ attempts, quizById, courseById }) {
     const pct = percentOf(Number(att.score), Number(att.total_marks));
     return `
       <tr>
-        <td><span class="badge badge-primary">${escapeHtml(course?.code || '')}</span></td>
+        <td><span class="badge badge-primary">${escapeHtml(courseTag(course))}</span></td>
         <td><strong>${classLabel(quiz.class_number)}</strong> · ${escapeHtml(quiz.title)}</td>
         <td class="small nowrap hide-sm">${fmtDateTime(att.submitted_at)}</td>
         <td class="nowrap">${visible
@@ -203,37 +280,6 @@ function renderRecentResults({ attempts, quizById, courseById }) {
       </tr>
     `;
   }).join('');
-}
-
-async function handleJoin(e) {
-  e.preventDefault();
-  const input = document.getElementById('join-code');
-  const btn = document.getElementById('btn-join');
-  const code = input.value.trim();
-  if (!code) {
-    input.focus();
-    showToast('Enter the course code your teacher gave you.', 'warning');
-    return;
-  }
-
-  setBusy(btn, true, 'Joining...');
-  try {
-    const { data, error } = await getSupabase().rpc('join_course', { p_code: code });
-    if (error) throw error;
-    if (!data?.success) {
-      showToast(data?.error || 'Could not join that course.', 'danger');
-      return;
-    }
-    input.value = '';
-    showToast(data.already_enrolled
-      ? `You're already in ${data.course_code}.`
-      : `Joined ${data.course_code} · ${data.course_name}!`, 'success');
-    await loadDashboard();
-  } catch (err) {
-    showToast(friendlyError(err), 'danger');
-  } finally {
-    setBusy(btn, false);
-  }
 }
 
 document.addEventListener('DOMContentLoaded', initStudentDashboard);

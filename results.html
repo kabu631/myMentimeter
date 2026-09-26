@@ -22,13 +22,7 @@
   <header class="app-navbar">
     <div class="app-container navbar-inner">
       <a href="dashboard.html" class="navbar-brand">
-        <div class="brand-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
-          </svg>
-        </div>
-        <span>Quizora</span>
+        <img src="assets/brand/quizora-logo.svg" alt="Quizora" class="brand-logo">
       </a>
       <nav class="navbar-nav"></nav>
     </div>
@@ -44,9 +38,9 @@
           <p class="page-lead">Every quiz you've submitted. Open one to see your answers.</p>
         </div>
         <div class="toolbar">
-          <label for="course-filter" class="small strong">Course</label>
+          <label for="course-filter" class="small strong">Subject</label>
           <select id="course-filter" class="form-select" style="min-width: 240px; padding: 0.55rem 0.85rem;">
-            <option value="all">All courses</option>
+            <option value="all">All subjects</option>
           </select>
         </div>
       </section>
@@ -82,7 +76,7 @@
         <table class="data-table">
           <thead>
             <tr>
-              <th>Course</th>
+              <th>Subject</th>
               <th class="hide-sm">Class</th>
               <th>Quiz</th>
               <th>Score</th>

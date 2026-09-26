@@ -8,7 +8,7 @@
  */
 
 import { getSupabase, showToast } from './supabase.js';
-import { APP_CONFIG } from './config.js';
+import { sameClass } from './classes.js';
 import { rootUrl, escapeHtml, friendlyError } from './utils.js';
 
 export const isTeacherRole = (role) => role === 'teacher' || role === 'admin';
@@ -20,9 +20,16 @@ export function homeUrlFor(profile) {
 
 /**
  * Register a student or teacher account.
- * Students provide a roll number and section; teachers provide the faculty code.
+ * Students give their roll number and the class they study in (they are then
+ * enrolled in every subject of that class). Teachers give the faculty code and
+ * the subjects they teach: [{ prefix, classChoice, name, code }], where
+ * classChoice comes from readClassPicker() and prefix is the row's element-id
+ * prefix (used to point errors at the right field).
+ *
+ * On failure `field` is either a logical name (fullName, studentId, classId,
+ * email, password, facultyCode, subjects) or the id of a subject-row element.
  */
-export async function registerUser({ accountType, fullName, studentId, section, email, password, facultyCode }) {
+export async function registerUser({ accountType, fullName, studentId, classId, email, password, facultyCode, subjects = [] }) {
   const supabase = getSupabase();
   if (!supabase) {
     return { success: false, error: 'Database client is not initialized.' };
@@ -32,7 +39,6 @@ export async function registerUser({ accountType, fullName, studentId, section, 
   const trimmedName = (fullName || '').trim();
   const trimmedId = (studentId || '').trim();
   const trimmedEmail = (email || '').trim().toLowerCase();
-  const trimmedSection = (section || '').trim();
   const trimmedCode = (facultyCode || '').trim();
 
   if (trimmedName.length < 2) {
@@ -41,14 +47,38 @@ export async function registerUser({ accountType, fullName, studentId, section, 
   if (!isTeacher && trimmedId.length < 2) {
     return { success: false, field: 'studentId', error: 'Please enter your college roll / registration number.' };
   }
+  if (!isTeacher && !classId) {
+    return { success: false, field: 'classId', error: 'Please choose the class you study in.' };
+  }
+  if (isTeacher && !trimmedCode) {
+    return { success: false, field: 'facultyCode', error: 'Please enter the faculty sign-up code from your administrator.' };
+  }
+
+  // Teachers: every subject needs a class and a name, with no repeats
+  const cleanSubjects = [];
+  if (isTeacher) {
+    if (subjects.length === 0) {
+      return { success: false, field: 'subjects', error: 'Add at least one subject you teach.' };
+    }
+    for (const s of subjects) {
+      if (s.classChoice.error) return { success: false, field: s.classChoice.field, error: s.classChoice.error };
+      const name = (s.name || '').trim().replace(/\s+/g, ' ');
+      if (name.length < 2) {
+        return { success: false, field: `${s.prefix}-name`, error: 'Enter the subject name, such as Computer Applications.' };
+      }
+      const repeat = cleanSubjects.find(c => c.name.toUpperCase() === name.toUpperCase() && sameClass(c.classChoice, s.classChoice));
+      if (repeat) {
+        return { success: false, field: `${s.prefix}-name`, error: 'You have already added this subject for this class.' };
+      }
+      cleanSubjects.push({ ...s, name, code: (s.code || '').trim() });
+    }
+  }
+
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
     return { success: false, field: 'email', error: 'Please enter a valid email address, like name@college.edu.' };
   }
   if (!password || password.length < 6) {
     return { success: false, field: 'password', error: 'Password must be at least 6 characters long.' };
-  }
-  if (isTeacher && !trimmedCode) {
-    return { success: false, field: 'facultyCode', error: 'Please enter the faculty sign-up code from your administrator.' };
   }
 
   try {
@@ -59,6 +89,16 @@ export async function registerUser({ accountType, fullName, studentId, section, 
       if (!codeOk) {
         return { success: false, field: 'facultyCode', error: 'That faculty sign-up code is not valid. Check it with your administrator.' };
       }
+      for (const s of cleanSubjects.filter(x => x.classChoice.classId)) {
+        const { data: taken, error: takenErr } = await supabase.rpc('is_subject_taken', { p_class_id: s.classChoice.classId, p_name: s.name });
+        if (takenErr) throw takenErr;
+        if (taken) {
+          return {
+            success: false, field: `${s.prefix}-name`,
+            error: `This class already has a subject called "${s.name}". If you teach it, check with your administrator; otherwise use a more specific name.`
+          };
+        }
+      }
     } else {
       const { data: idFree, error } = await supabase.rpc('is_student_id_available', { p_student_id: trimmedId });
       if (error) throw error;
@@ -68,8 +108,18 @@ export async function registerUser({ accountType, fullName, studentId, section, 
     }
 
     const metadata = isTeacher
-      ? { account_type: 'teacher', full_name: trimmedName, faculty_code: trimmedCode }
-      : { account_type: 'student', full_name: trimmedName, student_id: trimmedId, section: trimmedSection };
+      ? {
+          account_type: 'teacher', full_name: trimmedName, faculty_code: trimmedCode,
+          subjects: cleanSubjects.map(s => ({
+            class_id: s.classChoice.classId || null,
+            program: s.classChoice.program || null,
+            semester: s.classChoice.semester || null,
+            section: s.classChoice.section || null,
+            name: s.name,
+            code: s.code || null
+          }))
+        }
+      : { account_type: 'student', full_name: trimmedName, student_id: trimmedId, class_id: classId };
 
     const { data, error: authErr } = await supabase.auth.signUp({
       email: trimmedEmail,
@@ -174,14 +224,12 @@ export async function getUserProfile() {
     const user = session?.user;
     if (!user) return null;
 
-    const { data: profile, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .maybeSingle();
-
+    const fetchProfile = (columns) => supabase.from('profiles').select(columns).eq('id', user.id).maybeSingle();
+    let { data: profile, error } = await fetchProfile('*, class:classes(id, program, semester, section)');
     if (error) {
+      // e.g. the database has not been upgraded yet and has no classes table
       console.warn('Profile fetch note:', error);
+      ({ data: profile } = await fetchProfile('*'));
     }
 
     // The trigger normally creates the row; fall back to a student view of auth metadata
@@ -190,7 +238,8 @@ export async function getUserProfile() {
       email: user.email,
       full_name: user.user_metadata?.full_name || user.email.split('@')[0],
       student_id: user.user_metadata?.student_id || null,
-      section: user.user_metadata?.section || null,
+      class_id: null,
+      class: null,
       role: 'student'
     };
   } catch (err) {
@@ -237,7 +286,7 @@ export function renderNavbar(profile) {
   const teacher = isTeacherRole(profile.role);
   const links = teacher
     ? [
-        ['admin/index.html', 'Courses'],
+        ['admin/index.html', 'Subjects'],
         ['admin/quizzes.html', 'Quizzes'],
         ['admin/students.html', 'Students'],
         ['admin/results.html', 'Gradebook']
@@ -275,8 +324,6 @@ export function renderNavbar(profile) {
 
   const brand = document.querySelector('.navbar-brand');
   if (brand && brand.tagName === 'A') brand.href = homeUrlFor(profile);
-  const brandText = document.querySelector('.navbar-brand span');
-  if (brandText && !brandText.id) brandText.textContent = APP_CONFIG.APP_NAME;
 }
 
 /**

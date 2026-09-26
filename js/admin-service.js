@@ -3,29 +3,35 @@
  * js/admin-service.js - Shared data helpers for the teacher console
  * ==============================================================================
  * Every query here is filtered by Row Level Security: teachers only ever see
- * their own courses, quizzes, students and attempts (admins see all).
+ * their own subjects, quizzes, students and attempts (admins see all).
+ * (A subject is a row of the `courses` table: one teacher, one class.)
  */
 
 import { getSupabase, showToast } from './supabase.js';
 import { requireAuth } from './auth.js';
-import { courseLabel, escapeHtml, friendlyError, summarizeCourse } from './utils.js';
+import { courseLabel, classTitle, escapeHtml, friendlyError, summarizeCourse } from './utils.js';
 
 const ACTIVE_COURSE_KEY = 'dcq_active_course';
+const CLASS_COLUMNS = 'id, program, semester, section';
 
 /** Guard for every teacher page. Returns the teacher's profile or null (after redirecting). */
 export async function guardAdminPage() {
   return requireAuth('teacher');
 }
 
-/** All courses visible to this teacher, active first, with student counts. */
+/** All subjects visible to this teacher with their class and student count; active first, then by class and name. */
 export async function loadTeacherCourses() {
   const { data, error } = await getSupabase()
     .from('courses')
-    .select('*, enrollments(count), teacher:profiles!courses_teacher_id_fkey(full_name)')
-    .order('is_archived', { ascending: true })
-    .order('code', { ascending: true });
+    .select(`*, class:classes(${CLASS_COLUMNS}), enrollments(count), teacher:profiles!courses_teacher_id_fkey(full_name)`)
+    .order('name', { ascending: true });
   if (error) throw error;
-  return (data || []).map(c => ({ ...c, student_count: c.enrollments?.[0]?.count || 0 }));
+  const classKey = (c) => (c.class ? classTitle(c.class) : '￿');
+  return (data || [])
+    .map(c => ({ ...c, student_count: c.enrollments?.[0]?.count || 0 }))
+    .sort((a, b) => Number(a.is_archived) - Number(b.is_archived) ||
+      classKey(a).localeCompare(classKey(b), undefined, { numeric: true }) ||
+      a.name.localeCompare(b.name));
 }
 
 /**
@@ -54,11 +60,11 @@ export function rememberActiveCourse(courseId) {
 export function renderCourseSwitcher(container, courses, activeId, onChange) {
   container.innerHTML = `
     <div class="course-switcher">
-      <label for="course-switcher-select">Course</label>
+      <label for="course-switcher-select">Subject</label>
       <select id="course-switcher-select" class="form-select">
         ${courses.map(c => `<option value="${c.id}" ${c.id === activeId ? 'selected' : ''}>${escapeHtml(courseLabel(c))}${c.is_archived ? ' — archived' : ''}</option>`).join('')}
       </select>
-      <a href="index.html" class="btn btn-outline btn-sm">Manage courses</a>
+      <a href="index.html" class="btn btn-outline btn-sm">Manage subjects</a>
     </div>
   `;
   container.querySelector('select').addEventListener('change', (e) => {
@@ -68,13 +74,13 @@ export function renderCourseSwitcher(container, courses, activeId, onChange) {
   rememberActiveCourse(activeId);
 }
 
-/** Empty state shown on course-scoped pages before the teacher has any course. */
+/** Empty state shown on subject-scoped pages before the teacher has any subject. */
 export function noCoursesHtml() {
   return `
     <div class="card empty-state">
-      <div class="empty-title">Create your first course</div>
-      <p class="empty-text">Quizzes, students and grades are organised by course. Create one to get a join code for your students.</p>
-      <a href="index.html?new=1" class="btn btn-primary">Create a course</a>
+      <div class="empty-title">Add the first subject you teach</div>
+      <p class="empty-text">Quizzes, students and grades are organised by subject. Choose the class and subject — every student of that class is added automatically.</p>
+      <a href="index.html?new=1" class="btn btn-primary">Add a subject</a>
     </div>
   `;
 }
@@ -94,15 +100,16 @@ export async function fetchAllRows(buildQuery, pageSize = 1000) {
 }
 
 /**
- * Everything needed for a course gradebook: enrolled students, quizzes, attempts,
- * and each student's semester summary (see summarizeCourse in utils.js).
+ * Everything needed for a subject gradebook: enrolled students (with their
+ * current class), quizzes, attempts, and each student's semester summary
+ * (see summarizeCourse in utils.js).
  */
 export async function loadCourseGradebook(course) {
   const supabase = getSupabase();
   const [enrollments, quizRes] = await Promise.all([
     fetchAllRows(() => supabase
       .from('enrollments')
-      .select('enrolled_at, profiles (id, full_name, student_id, section, email)')
+      .select(`enrolled_at, profiles (id, full_name, student_id, email, class_id, class:classes(${CLASS_COLUMNS}))`)
       .eq('course_id', course.id)
       .order('student_id', { ascending: true })),
     supabase
@@ -134,7 +141,7 @@ export async function loadCourseGradebook(course) {
 
   const summaries = new Map(students.map(s => [
     s.id,
-    summarizeCourse(quizzes, attemptsByStudent.get(s.id) || new Map(), course.final_weight)
+    summarizeCourse(quizzes, attemptsByStudent.get(s.id) || new Map(), course.final_weight, s.enrolled_at)
   ]));
 
   return { students, quizzes, attempts, attemptsByStudent, summaries };

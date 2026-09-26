@@ -227,23 +227,19 @@ main.main-content:focus { outline: none; }
 
 .navbar-brand:hover { color: var(--text-primary); }
 
-.brand-icon {
-  width: 34px;
+/* Quizora logo: assets/brand/quizora-logo.svg (wordmark) and quizora-mark.svg (Q icon) */
+.brand-logo {
+  display: block;
   height: 34px;
-  border-radius: var(--radius-md);
-  background: var(--primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  flex-shrink: 0;
+  width: auto;
+  aspect-ratio: 1461 / 335;
 }
 
-.brand-icon svg {
-  width: 18px;
-  height: 18px;
-  stroke: #ffffff;
-  fill: none;
+.brand-mark {
+  display: block;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
 }
 
 .navbar-nav {

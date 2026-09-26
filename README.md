@@ -2,7 +2,7 @@
 
 A free quiz portal for the end of every class. Teachers publish a short multiple-choice quiz when the lecture
 finishes, students answer on their phone and see their score straight away, and each student's semester marks
-add up automatically for every course they take.
+add up automatically for every subject they take.
 
 **Live site:** https://kabu631.github.io/myMentimeter/
 
@@ -11,27 +11,43 @@ database. Both are free.
 
 ---
 
+## How the college is organised
+
+- A **class** is a program and semester, with an optional section: *BBA · 1st Semester*, *BBA · 5th Semester*.
+- A **subject** belongs to one class and has one teacher. A class usually has about five subjects taught by
+  five teachers. One teacher can teach several subjects in several classes.
+- A **student** belongs to exactly one class and is enrolled in **every subject of that class automatically**,
+  including subjects a teacher adds later.
+
+For example, Ram studies in *BBA · 1st Semester*, where Hari teaches Computer Applications, so Ram sees Hari's quizzes.
+Geeta studies in *BBA · 5th Semester*, where Gopal teaches E-commerce, so she sees Gopal's quizzes and not Hari's.
+
 ## What it does
 
 **Students**
-- Register once (name, roll number, section), then join each course with the code their teacher shares.
-- See every open quiz from all their courses on one dashboard. One attempt per quiz, with an optional timer.
+- Register once with their name, roll number and **class**. Their subjects appear straight away, with no codes to enter.
+- See every open quiz from all their subjects on one dashboard. One attempt per quiz, with an optional timer.
 - Get their score as soon as they submit. They can review correct answers once the teacher closes the quiz.
-- Open their **Profile** for a semester report card: every quiz in each course, the total, the percentage,
-  and final marks scaled to the teacher's weight (for example 8.5 / 10). The report can be printed or saved as a PDF.
+- Open their **Profile** for a semester report card, grouped by class: every quiz in each subject, the total, the
+  percentage, and final marks scaled to the teacher's weight (for example 8.5 / 10). The report can be printed or saved as a PDF.
+- They can fix a wrong class choice themselves until they take their first quiz. After that, a teacher moves them.
 
 **Teachers**
-- Run any number of courses and sections. Each course has its own join code, roster and gradebook.
+- Register with the faculty code and **the subjects they teach**, choosing the class of each one (or adding a new
+  class). They can add more subjects later from the console.
 - Write quizzes with 2–6 options per question or True/False, marks per question, a time limit, and an
   automatic close time.
 - **Gradebook:** one row per student, one column per quiz, with totals, percentages and weighted final
   marks. Open a student to see every answer or to allow a retake. Export the gradebook or a single student's
   report as CSV.
-- Teachers see only their own courses and students. An **admin** account can see all of them.
+- **Students page:** copy a sign-up link that pre-selects the class, move a student to another class, or move
+  the whole class to its next semester at the end of term. Marks already earned stay on every student's report.
+- Teachers see only their own subjects and the students of those classes. An **admin** account can see all of them.
 
 **How semester marks are counted.** A quiz counts once the student has taken it or once it has closed. A
 missed closed quiz scores 0 out of its full marks. Open quizzes a student hasn't taken yet don't count until
-they close. If a course has a *quiz marks in final grade* weight (such as 10), the percentage is scaled to it.
+they close. Quizzes held before a student joined the subject (they registered late, or moved in from another
+class) don't count either. If a subject has a *quiz marks in final grade* weight (such as 10), the percentage is scaled to it.
 
 ---
 
@@ -50,8 +66,9 @@ Open **SQL Editor → New query**, paste the whole of [sql/setup.sql](sql/setup.
   it can register a teacher account. To change it:
   `UPDATE public.app_settings SET value = 'NEW-CODE' WHERE key = 'faculty_signup_code';`
 - The script can safely run again. If you used the older single-course version, it moves your existing
-  quizzes into a course called **CS-301** owned by your teacher account and enrolls every existing
-  student in it.
+  quizzes into a subject called **CS-301** owned by your teacher account and enrolls every existing
+  student in it. Afterwards, edit that subject to choose its class. Existing students are asked to pick their
+  class the next time they open their dashboard.
 - [sql/hotfix_security_advisor.sql](sql/hotfix_security_advisor.sql) is only a stopgap for a database
   still on the old single-course schema. `setup.sql` already includes the same fixes, and it's fine to run
   after the hotfix.
@@ -71,9 +88,12 @@ Open **SQL Editor → New query**, paste the whole of [sql/setup.sql](sql/setup.
 3. After a minute or two the site is live at `https://kabu631.github.io/myMentimeter/`.
 
 ### 5. First accounts
-- **Teachers:** open the site → **Create account** → **I'm a Teacher** → enter the faculty code.
+- **Teachers first:** open the site → **Create account** → **I'm a Teacher** → enter the faculty code and add each
+  subject you teach, choosing its class or adding the class (for example *BBA*, *1st Semester*). A class is open to
+  students once it has at least one subject.
 - **Admin (optional):** register, then run [sql/make_admin.sql](sql/make_admin.sql) with your email.
-- **Students:** share the course **join code**. The Students page has a *Copy invite message* button.
+- **Students:** they register and choose their class. On the Students page, *Copy sign-up link* gives a link that
+  pre-selects the class, and *Copy invite message* gives text to paste in the class group.
 
 ---
 
@@ -84,7 +104,9 @@ Open **SQL Editor → New query**, paste the whole of [sql/setup.sql](sql/setup.
 2. Students take it from their dashboard and see their score.
 3. **Close** the quiz (or let the automatic close time pass). Students can then review the correct
    answers, if you allowed it.
-4. **End of semester:** Gradebook → **Export gradebook (CSV)**.
+4. **End of semester:** Gradebook → **Export gradebook (CSV)**. Then, on the Students page, **Move class to next
+   semester** (for example BBA 1st → BBA 2nd), and archive the old subject from the Subjects page. Every student
+   keeps the marks they earned, and next year's students who choose BBA 1st Semester aren't added to the archived subject.
 
 A student forgot their password right before a quiz? Run [sql/reset_student_password.sql](sql/reset_student_password.sql)
 to set a temporary one immediately.
@@ -106,6 +128,9 @@ reduced-motion support, inline form errors, and touch targets of at least 24 px.
   answer-key column, so the key never reaches their browser.
 - Row Level Security isolates each teacher's data and each student's attempts. Students can't insert or edit
   attempts, change their score, or change their role, roll number or email.
+- Enrollment comes only from a student's class and is maintained by database triggers, so nobody can add
+  themselves to another class's subjects. Students can change their own class only until they take a quiz;
+  after that only their teachers (or an admin) can move them.
 - Correct answers are revealed only after a quiz closes, so students can't pass them on while others are
   still taking it.
 - Privileged functions live in a `private` schema that the Supabase API doesn't expose. The app calls
@@ -121,19 +146,19 @@ index.html            Landing page (signed-in users go straight to their home)
 login.html            Sign in + forgot password
 register.html         Student / teacher registration
 reset-password.html   Set a new password from the email link
-dashboard.html        Student: open quizzes, courses, join by code, recent results
+dashboard.html        Student: class, open quizzes, subjects, recent results
 quiz.html             Student: take a quiz (timer, auto-save, keyboard shortcuts)
 results.html          Student: all attempts + answer review
-profile.html          Student: semester report card, edit profile, change password
-admin/index.html      Teacher: courses, join codes, open quizzes
-admin/quizzes.html    Teacher: quiz list per course (publish / close / reopen / delete)
+profile.html          Student: semester report card by class, edit name/class, change password
+admin/index.html      Teacher: subjects grouped by class, add/edit subjects, open quizzes
+admin/quizzes.html    Teacher: quiz list per subject (publish / close / reopen / delete)
 admin/create-quiz.html Teacher: quiz editor
-admin/students.html   Teacher: roster, invite message, remove students
+admin/students.html   Teacher: class roster, sign-up link, move students / promote a class
 admin/results.html    Teacher: semester gradebook, student reports, CSV export
-js/                   One module per page plus shared auth, utils, student-data, review, admin-service
+js/                   One module per page plus shared auth, utils, classes, student-data, review, admin-service
 css/                  Design tokens (main), components, quiz, admin, auth, landing
 design-system/        Design system master file (source of truth for the UI)
-sql/setup.sql         Complete database: tables, RLS, RPCs (run this)
+sql/setup.sql         Complete database: classes, subjects, auto-enrollment, RLS, RPCs (run this)
 sql/make_admin.sql    Change an account's role
 sql/reset_student_password.sql  Set a temporary password
 ```

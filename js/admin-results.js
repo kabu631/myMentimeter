@@ -1,6 +1,6 @@
 /**
  * ==============================================================================
- * js/admin-results.js - Semester Gradebook for one course
+ * js/admin-results.js - Semester Gradebook for one subject
  * ==============================================================================
  * 1. Class matrix: one row per student, one column per quiz, totals, % and
  *    weighted final marks, with per-quiz class averages in the footer
@@ -15,8 +15,9 @@ import {
 } from './admin-service.js';
 import { fetchAttemptReview, renderReviewHtml, reviewTitle } from './review.js';
 import {
-  escapeHtml, fmtNum, fmtPct, fmtDate, fmtDateTime, classLabel, courseLabel, percentOf, pctBadgeClass,
-  scorePillClass, isQuizClosed, downloadCsv, safeFilename, emptyState, friendlyError
+  escapeHtml, fmtNum, fmtPct, fmtDate, fmtDateTime, classLabel, classTitle, courseLabel, percentOf, pctBadgeClass,
+  scorePillClass, isQuizClosed, downloadCsv, safeFilename, emptyState, friendlyError, ordinal,
+  QUIZ_STATE_BADGES, QUIZ_STATE_LABELS
 } from './utils.js';
 
 let courses = [];
@@ -24,7 +25,7 @@ let activeCourse = null;
 let book = null;          // { students, quizzes, attempts, attemptsByStudent, summaries }
 let heldQuizzes = [];     // non-draft quizzes, by class number
 let selectedStudentId = null;
-const filters = { term: '', section: 'all' };
+const filters = { term: '' };
 
 async function initGradebook() {
   const teacher = await guardAdminPage();
@@ -61,7 +62,7 @@ async function selectCourse(courseId) {
   document.getElementById('course-title').textContent = courseLabel(activeCourse);
   document.getElementById('course-subtitle').textContent = [
     activeCourse.term,
-    activeCourse.final_weight ? `Quizzes count for ${fmtNum(activeCourse.final_weight)} marks of the final grade` : 'Tip: set a "quiz marks in final grade" weight on the course to get scaled final marks'
+    activeCourse.final_weight ? `Quizzes count for ${fmtNum(activeCourse.final_weight)} marks of the final grade` : 'Tip: set a "quiz marks in final grade" weight on the subject to get scaled final marks'
   ].filter(Boolean).join(' · ');
 
   try {
@@ -71,12 +72,6 @@ async function selectCourse(courseId) {
     return;
   }
   heldQuizzes = book.quizzes.filter(q => q.status !== 'draft');
-
-  const sectionSelect = document.getElementById('filter-section');
-  const sections = [...new Set(book.students.map(s => (s.section || '').trim()).filter(Boolean))].sort();
-  sectionSelect.innerHTML = '<option value="all">All sections</option>' +
-    sections.map(s => `<option value="${escapeHtml(s)}">Section ${escapeHtml(s)}</option>`).join('');
-  filters.section = 'all';
 
   const studentSelect = document.getElementById('individual-student-select');
   studentSelect.innerHTML = book.students.map(s =>
@@ -89,7 +84,6 @@ async function selectCourse(courseId) {
 
 function setupEvents() {
   document.getElementById('filter-student').addEventListener('input', (e) => { filters.term = e.target.value.trim().toLowerCase(); renderMatrix(); });
-  document.getElementById('filter-section').addEventListener('change', (e) => { filters.section = e.target.value; renderMatrix(); });
   document.getElementById('tab-btn-matrix').addEventListener('click', () => switchView('matrix'));
   document.getElementById('tab-btn-individual').addEventListener('click', () => {
     if (!selectedStudentId && book?.students.length) selectedStudentId = book.students[0].id;
@@ -116,7 +110,7 @@ function showStudent(studentId) {
   if (!studentId) {
     switchView('individual');
     document.getElementById('student-individual-content').innerHTML =
-      `<div class="card">${emptyState('users', 'No students yet', 'Students appear here after they join the course.')}</div>`;
+      `<div class="card">${emptyState('users', 'No students yet', 'Students appear here once they register and choose this class.')}</div>`;
     return;
   }
   selectedStudentId = studentId;
@@ -127,7 +121,6 @@ function showStudent(studentId) {
 
 function filteredStudents() {
   return book.students.filter(s => {
-    if (filters.section !== 'all' && (s.section || '').trim() !== filters.section) return false;
     if (!filters.term) return true;
     return [s.full_name, s.student_id, s.email].some(v => (v || '').toLowerCase().includes(filters.term));
   });
@@ -154,12 +147,11 @@ function renderMatrix() {
   const body = document.getElementById('matrix-table-body');
   const foot = document.getElementById('matrix-table-foot-row');
   const weight = activeCourse.final_weight;
-  const totalCols = 3 + heldQuizzes.length + 3 + (weight ? 1 : 0);
+  const totalCols = 2 + heldQuizzes.length + 3 + (weight ? 1 : 0);
 
   head.innerHTML = `
     <th class="sticky-id">Roll No.</th>
     <th class="sticky-name">Student</th>
-    <th>Sec.</th>
     ${heldQuizzes.map(q => `
       <th class="matrix-col-q" title="${escapeHtml(`${classLabel(q.class_number)}: ${q.title} (${fmtDate(q.scheduled_date)}) · ${fmtNum(q.total_marks)} marks`)}">
         C${String(q.class_number).padStart(2, '0')}<div class="small muted" style="font-weight: 500;">/${fmtNum(q.total_marks)}</div>
@@ -173,8 +165,10 @@ function renderMatrix() {
   const list = filteredStudents();
   if (list.length === 0) {
     body.innerHTML = `<tr><td colspan="${totalCols}" style="text-align: left;">${book.students.length === 0
-      ? emptyState('users', 'No students enrolled yet', `Share join code ${activeCourse.join_code} with your class.`)
-      : emptyState('search', 'No students match', 'Clear the search or section filter.')}</td></tr>`;
+      ? emptyState('users', 'No students yet', activeCourse.class
+          ? `Students appear here once they register and choose ${classTitle(activeCourse.class)}.`
+          : 'Assign this subject to a class on the Subjects page.')
+      : emptyState('search', 'No students match', 'Clear the search.')}</td></tr>`;
     foot.innerHTML = '';
     return;
   }
@@ -186,6 +180,7 @@ function renderMatrix() {
     const sum = book.summaries.get(student.id);
     const attempts = book.attemptsByStudent.get(student.id) || new Map();
 
+    const states = new Map(sum.rows.map(r => [r.quiz.id, r.state]));
     const cells = heldQuizzes.map((q, i) => {
       const att = attempts.get(q.id);
       if (att) {
@@ -195,16 +190,16 @@ function renderMatrix() {
         colCount[i] += 1;
         return `<td class="matrix-col-q"><span class="score-pill ${scorePillClass(pct)}" title="${fmtNum(sc)} / ${fmtNum(att.total_marks)} (${fmtPct(pct, 0)})">${fmtNum(sc)}</span></td>`;
       }
-      return isQuizClosed(q)
-        ? '<td class="matrix-col-q"><span class="score-pill score-missed" title="Missed">0</span></td>'
-        : '<td class="matrix-col-q"><span class="score-pill score-none" title="Open — not taken yet">·</span></td>';
+      const state = states.get(q.id);
+      if (state === 'missed') return '<td class="matrix-col-q"><span class="score-pill score-missed" title="Missed">0</span></td>';
+      if (state === 'before') return '<td class="matrix-col-q"><span class="score-pill score-none score-before" title="Held before the student joined — not counted">–</span></td>';
+      return '<td class="matrix-col-q"><span class="score-pill score-none" title="Open — not taken yet">·</span></td>';
     }).join('');
 
     return `
       <tr>
         <td class="sticky-id"><button class="link-button mono" data-student="${student.id}">${escapeHtml(student.student_id || '—')}</button></td>
         <td class="sticky-name"><button class="link-button" style="color: var(--text-primary); font-weight: 600; text-align: left;" data-student="${student.id}">${escapeHtml(student.full_name)}</button></td>
-        <td>${escapeHtml(student.section || '—')}</td>
         ${cells}
         <td class="strong text-success">${fmtNum(sum.earned)}</td>
         <td class="muted">${fmtNum(sum.possible)}</td>
@@ -223,7 +218,6 @@ function renderMatrix() {
   foot.innerHTML = `
     <th class="sticky-id">Average</th>
     <th class="sticky-name small muted">of students who took it</th>
-    <th></th>
     ${heldQuizzes.map((q, i) => `<th class="matrix-col-q small">${colCount[i] ? fmtNum(colSum[i] / colCount[i], 1) : '–'}</th>`).join('')}
     <th></th>
     <th></th>
@@ -240,7 +234,7 @@ function renderIndividual() {
   const container = document.getElementById('student-individual-content');
   const student = book.students.find(s => s.id === selectedStudentId);
   if (!student) {
-    container.innerHTML = '<div class="alert alert-warning">This student is no longer enrolled in the course.</div>';
+    container.innerHTML = '<div class="alert alert-warning">This student is no longer enrolled in this subject.</div>';
     return;
   }
   const sum = book.summaries.get(student.id);
@@ -248,7 +242,7 @@ function renderIndividual() {
 
   const rows = sum.rows.map(({ quiz, attempt, state }) => {
     const pct = attempt ? percentOf(Number(attempt.score), Number(attempt.total_marks)) : 0;
-    const status = { attempted: '<span class="badge badge-published">Taken</span>', missed: '<span class="badge badge-closed">Missed</span>', pending: '<span class="badge badge-warning">Open</span>' }[state];
+    const status = QUIZ_STATE_BADGES[state];
     return `
       <tr class="${state === 'missed' ? 'state-missed' : ''}">
         <td class="nowrap">${classLabel(quiz.class_number)}</td>
@@ -272,7 +266,7 @@ function renderIndividual() {
         <div>
           <div class="page-eyebrow">Semester report</div>
           <h2 style="margin-bottom: 0.25rem;">${escapeHtml(student.full_name)}</h2>
-          <div class="small muted">${escapeHtml([student.student_id && `Roll No: ${student.student_id}`, student.section && `Section ${student.section}`, student.email].filter(Boolean).join(' · '))}</div>
+          <div class="small muted">${escapeHtml([student.student_id && `Roll No: ${student.student_id}`, student.class && classTitle(student.class), student.email].filter(Boolean).join(' · '))}</div>
         </div>
         <div class="toolbar no-print">
           <button id="btn-export-student" class="btn btn-secondary btn-sm">Export report (CSV)</button>
@@ -350,7 +344,7 @@ function exportGradebook() {
     return;
   }
   const weight = activeCourse.final_weight;
-  const header = ['Roll No', 'Name', 'Section', 'Email',
+  const header = ['Roll No', 'Name', 'Class', 'Email',
     ...heldQuizzes.map(q => `${classLabel(q.class_number)} - ${q.title} (/${fmtNum(q.total_marks)})`),
     'Quizzes Taken', 'Quizzes Held', 'Marks Earned', 'Marks Possible', 'Percentage'];
   if (weight) header.push(`Final Marks (/${fmtNum(weight)})`);
@@ -359,11 +353,12 @@ function exportGradebook() {
   list.forEach(s => {
     const sum = book.summaries.get(s.id);
     const attempts = book.attemptsByStudent.get(s.id) || new Map();
-    const row = [s.student_id || '', s.full_name, s.section || '', s.email,
+    const states = new Map(sum.rows.map(r => [r.quiz.id, r.state]));
+    const row = [s.student_id || '', s.full_name, s.class ? classTitle(s.class) : '', s.email,
       ...heldQuizzes.map(q => {
         const att = attempts.get(q.id);
         if (att) return Number(att.score);
-        return isQuizClosed(q) ? 0 : '';
+        return states.get(q.id) === 'missed' ? 0 : '';
       }),
       sum.attempted, sum.counted, Number(fmtNum(sum.earned)), Number(fmtNum(sum.possible)), Number(sum.percentage.toFixed(2))];
     if (weight) row.push(Number(fmtNum(sum.weighted || 0)));
@@ -371,7 +366,7 @@ function exportGradebook() {
   });
 
   const date = new Date().toISOString().slice(0, 10);
-  downloadCsv(rows, `${safeFilename(activeCourse.code)}_Gradebook_${date}.csv`);
+  downloadCsv(rows, `${fileStem()}_Gradebook_${date}.csv`);
   showToast('Gradebook exported.', 'success');
 }
 
@@ -381,7 +376,7 @@ function exportStudent(student) {
   sum.rows.forEach(({ quiz, attempt, state }) => {
     rows.push([
       classLabel(quiz.class_number), quiz.title, quiz.scheduled_date,
-      { attempted: 'Taken', missed: 'Missed', pending: 'Open' }[state],
+      QUIZ_STATE_LABELS[state],
       attempt ? Number(attempt.score) : state === 'missed' ? 0 : '',
       attempt ? Number(attempt.total_marks) : Number(quiz.total_marks),
       attempt ? Number(percentOf(Number(attempt.score), Number(attempt.total_marks)).toFixed(2)) : state === 'missed' ? 0 : '',
@@ -392,7 +387,13 @@ function exportStudent(student) {
   rows.push(['Semester total', '', '', '', Number(fmtNum(sum.earned)), Number(fmtNum(sum.possible)), Number(sum.percentage.toFixed(2)), '']);
   if (activeCourse.final_weight) rows.push([`Final quiz marks (/${fmtNum(activeCourse.final_weight)})`, '', '', '', Number(fmtNum(sum.weighted || 0))]);
 
-  downloadCsv(rows, `${safeFilename(activeCourse.code)}_${safeFilename(student.student_id || student.full_name)}_Report.csv`);
+  downloadCsv(rows, `${fileStem()}_${safeFilename(student.student_id || student.full_name)}_Report.csv`);
+}
+
+/** "BBA_1st_BBA-105" — class plus subject code (or name) for export file names. */
+function fileStem() {
+  const cls = activeCourse.class ? `${activeCourse.class.program}_${ordinal(activeCourse.class.semester)}_` : '';
+  return safeFilename(cls + (activeCourse.code || activeCourse.name));
 }
 
 document.addEventListener('DOMContentLoaded', initGradebook);

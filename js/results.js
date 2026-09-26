@@ -12,7 +12,7 @@ import { requireAuth } from './auth.js';
 import { loadStudentData, overallAverage } from './student-data.js';
 import { fetchAttemptReview, renderReviewHtml, reviewTitle } from './review.js';
 import {
-  escapeHtml, fmtNum, fmtPct, fmtDateTime, classLabel, courseLabel, percentOf, pctBadgeClass,
+  escapeHtml, fmtNum, fmtPct, fmtDateTime, classLabel, courseLabel, courseTag, percentOf, pctBadgeClass,
   isScoreVisible, emptyState, friendlyError
 } from './utils.js';
 
@@ -26,7 +26,7 @@ async function initResults() {
   const params = new URLSearchParams(window.location.search);
 
   try {
-    data = await loadStudentData(user.id);
+    data = await loadStudentData(user);
   } catch (err) {
     showToast('Could not load results: ' + friendlyError(err), 'danger');
     return;
@@ -106,7 +106,7 @@ function renderTable() {
     const pct = percentOf(Number(att.score), Number(att.total_marks));
     return `
       <tr>
-        <td><span class="badge badge-primary">${escapeHtml(course?.code || '')}</span></td>
+        <td><span class="badge badge-primary">${escapeHtml(courseTag(course))}</span></td>
         <td class="nowrap hide-sm">${classLabel(quiz.class_number)}</td>
         <td><strong class="strong">${escapeHtml(quiz.title)}</strong></td>
         <td class="nowrap">${visible ? `<strong class="text-success">${fmtNum(att.score)}</strong> / ${fmtNum(att.total_marks)}` : '<span class="small muted">After quiz closes</span>'}</td>

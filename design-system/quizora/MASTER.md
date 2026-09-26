@@ -63,7 +63,10 @@ targets children's apps and was rejected for a college audience.
 - **Cards:** white, 1px `--border-color`, 12px radius, `--shadow-sm`
 - **Inputs:** 1px `--border-input`, 44px min-height, focus = primary border + 4px `--primary-glow` ring; invalid = `--danger` border + inline `.field-error` linked by `aria-describedby`
 - **Quiz options:** 56px min-height; selected = primary fill on the letter key **and** a check mark (not colour alone)
-- **Score pills (gradebook):** number + colour band (≥80% green, 50–79% amber, <50% red); missed = dashed outline, open = dot
+- **Score pills (gradebook):** number + colour band (≥80% green, 50–79% amber, <50% red); missed = dashed outline, open = dot, before joining = dash
+- **Class chip:** pill with a graduation-cap icon, `--primary` text on `--primary-soft`, e.g. "BBA · 1st Semester"; large size in page headers
+- **Class picker:** select of existing classes (with subject counts) plus "+ Add a new class", which reveals Program / Semester / Section fields indented behind a `--primary-border` rule
+- **Subject rows (teacher sign-up):** repeatable inset panels on `--bg-glass`, numbered "Subject 1, 2…", with an icon remove button labelled "Remove subject N"
 
 ## Page Pattern (landing)
 
@@ -82,7 +85,7 @@ No GSAP — the site has no build step and the motion budget is low.
 
 - Encouraging score message on the result screen (tiers at 90 / 70 / 50%)
 - Achievement-orange score ring
-- Participation progress bar on course cards (green at 100%)
+- Participation progress bar on subject cards (green at 100%)
 
 ## Accessibility rules applied
 

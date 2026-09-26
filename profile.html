@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0F766E">
   <title>My Profile &amp; Semester Report | Quizora</title>
-  <meta name="description" content="Your profile and semester quiz marks for every course.">
+  <meta name="description" content="Your profile and semester quiz marks for every subject.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -21,13 +21,7 @@
   <header class="app-navbar">
     <div class="app-container navbar-inner">
       <a href="dashboard.html" class="navbar-brand">
-        <div class="brand-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
-          </svg>
-        </div>
-        <span>Quizora</span>
+        <img src="assets/brand/quizora-logo.svg" alt="Quizora" class="brand-logo">
       </a>
       <nav class="navbar-nav"></nav>
     </div>
@@ -41,6 +35,7 @@
           <div class="page-eyebrow">Student Profile</div>
           <h1 id="profile-name" class="page-title">My Profile</h1>
           <p id="profile-meta" class="page-lead"></p>
+          <div id="profile-class"></div>
         </div>
         <div class="toolbar no-print">
           <button id="btn-edit-profile" class="btn btn-secondary">Edit profile</button>
@@ -51,21 +46,24 @@
       <!-- Edit profile & password -->
       <section id="edit-panel" class="card section-block hidden no-print">
         <div class="grid-cards" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
-          <form id="form-profile">
-            <h3 class="section-title" style="margin-bottom: 1rem;">Profile details</h3>
+          <form id="form-profile" novalidate>
+            <h2 class="section-title" style="margin-bottom: 1rem;">Profile details</h2>
             <div class="form-group">
               <label class="form-label" for="edit-name">Full name</label>
-              <input id="edit-name" class="form-control" required>
+              <input id="edit-name" class="form-control" required autocomplete="name">
             </div>
             <div class="form-group">
-              <label class="form-label" for="edit-section">Section</label>
-              <input id="edit-section" class="form-control" placeholder="e.g. A">
+              <label class="form-label" for="edit-class">Class</label>
+              <select id="edit-class" class="form-select" aria-describedby="edit-class-hint">
+                <option value="">Loading classes…</option>
+              </select>
+              <span id="edit-class-hint" class="input-hint">Changing your class enrolls you in its subjects.</span>
             </div>
             <p class="small muted">Roll number and email can only be changed by an administrator.</p>
             <button type="submit" id="btn-save-profile" class="btn btn-primary">Save changes</button>
           </form>
           <form id="form-password">
-            <h3 class="section-title" style="margin-bottom: 1rem;">Change password</h3>
+            <h2 class="section-title" style="margin-bottom: 1rem;">Change password</h2>
             <div class="form-group">
               <label class="form-label" for="new-password">New password</label>
               <input id="new-password" type="password" class="form-control" minlength="6" autocomplete="new-password" placeholder="At least 6 characters">
@@ -84,7 +82,7 @@
         <div class="stat-card">
           <div class="stat-content">
             <div id="overall-courses" class="stat-value">–</div>
-            <div class="stat-label">Courses</div>
+            <div class="stat-label">Subjects</div>
           </div>
         </div>
         <div class="stat-card">
@@ -96,7 +94,7 @@
         <div class="stat-card">
           <div class="stat-content">
             <div id="overall-average" class="stat-value text-primary">–</div>
-            <div class="stat-label">Average Across Courses</div>
+            <div class="stat-label">Average Across Subjects</div>
           </div>
         </div>
       </section>
@@ -111,7 +109,8 @@
         </div>
         <p class="small muted">
           How marks are counted: each quiz counts once you have taken it or once it has closed. A missed quiz scores
-          zero out of its full marks. Open quizzes you haven't taken yet are not counted until they close.
+          zero out of its full marks. Open quizzes you haven't taken yet are not counted until they close, and quizzes
+          held before you joined a subject are not counted at all.
         </p>
       </section>
 

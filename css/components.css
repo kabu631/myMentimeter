@@ -797,23 +797,92 @@ input[type="radio"] {
   margin-top: auto;
 }
 
-/* Join code chip */
-.join-code {
+/* Class chip: "BBA · 1st Semester" */
+.class-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 1rem;
-  font-weight: 800;
-  letter-spacing: 0.15em;
-  color: var(--text-primary);
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--primary);
   background: var(--primary-soft);
-  border: 1px dashed var(--primary-bright);
-  border-radius: var(--radius-md);
-  padding: 0.2rem 0.3rem 0.2rem 0.7rem;
+  border: 1px solid var(--primary-border);
+  border-radius: var(--radius-full);
+  padding: 0.25rem 0.75rem;
 }
 
-.join-code.join-code-lg { font-size: 1.6rem; padding: 0.35rem 0.45rem 0.35rem 1rem; }
+.class-chip svg { width: 15px; height: 15px; flex-shrink: 0; }
+.class-chip.class-chip-lg { font-size: 1.05rem; padding: 0.4rem 1rem; }
+
+/* Subjects grouped by class (teacher home) */
+.class-group + .class-group { margin-top: 2rem; }
+
+.class-group-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.05rem;
+  color: var(--primary);
+  margin: 0;
+}
+
+.class-group-title svg { width: 20px; height: 20px; flex-shrink: 0; }
+
+.class-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.9rem;
+}
+
+/* Class picker: fields for a class that isn't listed yet */
+.new-class-fields {
+  border-left: 3px solid var(--primary-border);
+  padding-left: 0.85rem;
+}
+
+.form-row.form-row-3 { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+
+/* Registration: the subjects a teacher teaches */
+.auth-card.auth-card-wide { max-width: 560px; }
+
+.subjects-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0 0 1.25rem;
+  min-width: 0;
+}
+
+.subjects-fieldset > legend { padding: 0; margin-bottom: 0.2rem; }
+.subject-rows { display: grid; gap: 0.9rem; margin: 0.75rem 0; }
+
+.subject-row {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-glass);
+  padding: 0.75rem 1rem 0.1rem;
+}
+
+.subject-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  margin-bottom: 0.4rem;
+}
+
+.subject-row-title {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.subject-row .icon-btn svg { width: 16px; height: 16px; }
 
 .icon-btn {
   display: inline-flex;
@@ -908,6 +977,17 @@ input[type="radio"] {
 
 /* Report card */
 .report-course { margin-bottom: var(--space-lg); break-inside: avoid; }
+
+.report-class-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 1.1rem;
+  margin: var(--space-xl) 0 var(--space-md);
+}
+
+.report-class-heading:first-child { margin-top: 0; }
 
 .report-summary {
   display: grid;

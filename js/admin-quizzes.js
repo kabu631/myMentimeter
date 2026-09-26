@@ -88,7 +88,7 @@ function renderTable() {
 
   if (list.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7">${quizzes.length === 0
-      ? emptyState('book', 'No quizzes in this course yet', 'Create your first quiz — it takes a couple of minutes.',
+      ? emptyState('book', 'No quizzes in this subject yet', 'Create your first quiz — it takes a couple of minutes.',
           `<a href="create-quiz.html?course=${activeCourse.id}" class="btn btn-primary">+ New Quiz</a>`)
       : emptyState('search', 'No quizzes match', 'Try a different search or filter.')}</td></tr>`;
     return;

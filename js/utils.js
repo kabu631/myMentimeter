@@ -54,13 +54,37 @@ export function scorePillClass(pct) {
   return 'score-low';
 }
 
+/** Lecture number within a subject: 7 -> "Class 07". */
 export function classLabel(n) {
   return `Class ${String(n ?? 0).padStart(2, '0')}`;
 }
 
+/** 1 -> "1st", 2 -> "2nd", 11 -> "11th" */
+export function ordinal(n) {
+  const v = Number(n) || 0;
+  const suffix = (v % 100 >= 11 && v % 100 <= 13) ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[v % 10] || 'th');
+  return `${v}${suffix}`;
+}
+
+/** A class of students: { program, semester, section } -> "BBA · 1st Semester · Section A". */
+export function classTitle(cls) {
+  if (!cls) return 'No class chosen';
+  const section = cls.section
+    ? ` · ${/^[A-Za-z0-9]{1,2}$/.test(cls.section) ? `Section ${cls.section}` : cls.section}`
+    : '';
+  return `${cls.program} · ${ordinal(cls.semester)} Semester${section}`;
+}
+
+/** Short tag for a subject in badges and tables: its code, or its name if it has none. */
+export function courseTag(course) {
+  return course?.code || course?.name || '';
+}
+
+/** Full subject label, with its class when known: "BBA-105 · Computer (BBA · 1st Semester)". */
 export function courseLabel(course) {
-  if (!course) return 'Unknown course';
-  return `${course.code} · ${course.name}${course.section ? ` (${course.section})` : ''}`;
+  if (!course) return 'Unknown subject';
+  const base = course.code ? `${course.code} · ${course.name}` : course.name;
+  return course.class ? `${base} (${classTitle(course.class)})` : base;
 }
 
 /** Accepts 'YYYY-MM-DD' (treated as a local date) or a timestamp. */
@@ -123,23 +147,42 @@ export function quizStatusBadge(quiz) {
 // Semester grading
 // ------------------------------------------------------------------------------
 
+/** A timestamp (or Date) as 'YYYY-MM-DD' in the viewer's timezone. */
+export function localIsoDate(value) {
+  const d = new Date(value);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Row states from summarizeCourse, as report labels. */
+export const QUIZ_STATE_LABELS = { attempted: 'Taken', missed: 'Missed', pending: 'Open', before: 'Before joining' };
+export const QUIZ_STATE_BADGES = {
+  attempted: '<span class="badge badge-published">Taken</span>',
+  missed: '<span class="badge badge-closed">Missed</span>',
+  pending: '<span class="badge badge-warning">Open</span>',
+  before: '<span class="badge badge-draft" title="Held before the student joined this subject — not counted">Before joining</span>'
+};
+
 /**
- * Semester summary for one student in one course.
+ * Semester summary for one student in one subject.
  *
  * A quiz counts toward the total once the student has attempted it or the quiz
  * has closed (a missed closed quiz scores 0 out of its full marks). Open quizzes
- * the student hasn't taken yet are "pending" and don't count yet. Drafts never count.
+ * the student hasn't taken yet are "pending" and don't count yet. Closed quizzes
+ * held before the student joined the subject (e.g. they registered late, or moved
+ * in from another class) are "before" and don't count. Drafts never count.
  *
- * @param {Array} quizzes            quizzes of the course (any order)
+ * @param {Array} quizzes            quizzes of the subject (any order)
  * @param {Map}   attemptsByQuizId   quiz_id -> attempt for this student
  * @param {number|null} finalWeight  course.final_weight (marks the quiz component is worth)
+ * @param {string|null} enrolledAt   when the student joined the subject (enrollments.enrolled_at)
  */
-export function summarizeCourse(quizzes, attemptsByQuizId, finalWeight = null) {
+export function summarizeCourse(quizzes, attemptsByQuizId, finalWeight = null, enrolledAt = null) {
   const rows = [];
   let earned = 0;
   let possible = 0;
   let attempted = 0;
   let counted = 0;
+  const joined = enrolledAt ? localIsoDate(enrolledAt) : null;
 
   const ordered = [...quizzes].sort((a, b) => a.class_number - b.class_number);
   for (const quiz of ordered) {
@@ -152,6 +195,8 @@ export function summarizeCourse(quizzes, attemptsByQuizId, finalWeight = null) {
       possible += Number(attempt.total_marks || 0);
       attempted += 1;
       counted += 1;
+    } else if (isQuizClosed(quiz) && joined && String(quiz.scheduled_date) < joined) {
+      state = 'before';
     } else if (isQuizClosed(quiz)) {
       state = 'missed';
       possible += Number(quiz.total_marks || 0);
@@ -210,6 +255,9 @@ export function friendlyError(err) {
   // Missing table/function: the database hasn't been upgraded with sql/setup.sql yet
   if (err?.code === 'PGRST202' || err?.code === 'PGRST205' || /in the schema cache/i.test(msg)) {
     return 'The database is not set up for this version of the app yet. Ask your administrator to run sql/setup.sql in Supabase.';
+  }
+  if (/courses_class_subject_unique/.test(msg)) {
+    return 'This class already has a subject with that name.';
   }
   return msg;
 }
@@ -300,8 +348,14 @@ export const ICONS = {
   arrowUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>',
   arrowDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>',
   duplicate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16V5a1 1 0 0 1 1-1h11"/></svg>',
-  key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>'
+  key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>',
+  cap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>'
 };
+
+/** Pill showing a class, e.g. "BBA · 1st Semester". */
+export function classChip(cls, { large = false } = {}) {
+  return `<span class="class-chip ${large ? 'class-chip-lg' : ''}">${ICONS.cap}${escapeHtml(classTitle(cls))}</span>`;
+}
 
 /** Standard empty-state block. `icon` is a key of ICONS. */
 export function emptyState(icon, title, text, actionHtml = '') {

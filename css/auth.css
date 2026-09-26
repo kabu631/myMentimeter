@@ -45,6 +45,13 @@
   fill: none;
 }
 
+.auth-brand-mark {
+  display: block;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 0.9rem;
+}
+
 .auth-title {
   font-size: 1.6rem;
   font-weight: 800;

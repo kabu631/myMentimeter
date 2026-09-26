@@ -12,7 +12,7 @@
 import { getSupabase, showToast } from './supabase.js';
 import { requireAuth } from './auth.js';
 import {
-  escapeHtml, fmtNum, fmtPct, classLabel, courseLabel, percentOf, pctBadgeClass,
+  escapeHtml, fmtNum, fmtPct, classLabel, courseLabel, courseTag, percentOf, pctBadgeClass,
   isQuizClosed, isScoreVisible, friendlyError
 } from './utils.js';
 
@@ -45,13 +45,13 @@ async function initQuizEngine() {
   try {
     const { data: quiz, error: quizErr } = await supabase
       .from('quizzes')
-      .select('*, courses (id, code, name, section)')
+      .select('*, courses (id, code, name, class:classes (program, semester, section))')
       .eq('id', quizId)
       .maybeSingle();
 
     if (quizErr) throw quizErr;
     if (!quiz) {
-      showErrorState('Quiz not available', 'This quiz was not found, is not published yet, or belongs to a course you have not joined.');
+      showErrorState('Quiz not available', 'This quiz was not found, is not published yet, or is not for one of your subjects.');
       return;
     }
 
@@ -93,7 +93,7 @@ async function initQuizEngine() {
     questions = qList;
     restoreProgress();
 
-    $('quiz-header-title').textContent = currentCourse?.code || 'Daily Quiz';
+    $('quiz-header-title').textContent = courseTag(currentCourse) || 'Daily Quiz';
     $('quiz-subline-title').textContent = `${quiz.title} · ${courseLabel(currentCourse)}`;
     $('quiz-class-badge').textContent = classLabel(quiz.class_number);
     $('btn-top-submit').classList.remove('hidden');

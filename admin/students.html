@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0F766E">
   <title>Students | Teacher Console</title>
-  <meta name="description" content="Course roster, join code and each student's semester progress.">
+  <meta name="description" content="The students of a class, their semester progress, and moving them to the next semester.">
   <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,13 +22,7 @@
   <header class="app-navbar">
     <div class="app-container navbar-inner">
       <a href="index.html" class="navbar-brand">
-        <div class="brand-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
-          </svg>
-        </div>
-        <span>Quizora</span>
+        <img src="../assets/brand/quizora-logo.svg" alt="Quizora" class="brand-logo">
       </a>
       <nav class="navbar-nav"></nav>
     </div>
@@ -43,28 +37,16 @@
           <div>
             <div class="page-eyebrow">Students</div>
             <h1 id="course-title" class="page-title">Students</h1>
-            <p class="page-lead">Everyone enrolled in this course and how they're doing this semester.</p>
+            <p class="page-lead">Every student of the class takes this subject automatically. Here is how each one is doing this semester.</p>
           </div>
           <button id="btn-export-roster" class="btn btn-secondary">Export roster (CSV)</button>
         </section>
 
-        <section class="card section-block" style="display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: center; justify-content: space-between;">
-          <div>
-            <div class="page-eyebrow">Join code</div>
-            <div class="toolbar">
-              <span id="join-code" class="join-code join-code-lg"></span>
-              <button id="btn-copy-code" class="btn btn-outline btn-sm">Copy code</button>
-              <button id="btn-copy-invite" class="btn btn-primary btn-sm">Copy invite message</button>
-            </div>
-          </div>
-          <p class="small muted" style="max-width: 420px; margin: 0;">
-            Students create an account on this site, then type this code into <strong>Join Course</strong> on their dashboard.
-            You can change the code from <a href="index.html">Courses</a> → edit.
-          </p>
-        </section>
+        <section id="class-card" class="card section-block class-card"></section>
 
         <div class="section-head">
-          <input type="search" id="student-search-input" class="form-control" placeholder="Search name, roll no, section, email..." style="max-width: 360px;">
+          <label for="student-search-input" class="sr-only">Search students</label>
+          <input type="search" id="student-search-input" class="form-control" placeholder="Search name, roll no, email..." style="max-width: 360px;">
           <span id="student-count-pill" class="badge badge-published" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">0 students</span>
         </div>
 
@@ -74,22 +56,45 @@
               <tr>
                 <th>Roll No.</th>
                 <th>Name</th>
-                <th>Section</th>
+                <th>Class</th>
                 <th>Email</th>
-                <th>Joined</th>
                 <th>Quizzes</th>
                 <th>Score</th>
                 <th></th>
               </tr>
             </thead>
             <tbody id="students-table-body">
-              <tr><td colspan="8" class="muted" style="text-align: center; padding: 2rem;">Loading roster...</td></tr>
+              <tr><td colspan="7" class="muted" style="text-align: center; padding: 2rem;">Loading students...</td></tr>
             </tbody>
           </table>
         </div>
       </div>
     </div>
   </main>
+
+  <!-- Move students to another class -->
+  <div id="move-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="move-modal-title">
+    <div class="modal-dialog" style="max-width: 580px;">
+      <form id="move-form" novalidate>
+        <div class="modal-header">
+          <h3 id="move-modal-title" class="modal-title">Move to another class</h3>
+          <button type="button" class="modal-close" data-close aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p id="move-summary"></p>
+          <div id="move-class-picker"></div>
+          <div class="alert alert-info small" style="margin-bottom: 0;">
+            Marks already earned stay on each student's report. They leave the subjects of their old class where they
+            have no marks yet, and join every subject of the new class.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" data-close>Cancel</button>
+          <button type="submit" id="btn-move" class="btn btn-primary">Move students</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <footer class="app-footer">
     <div class="app-container footer-inner">

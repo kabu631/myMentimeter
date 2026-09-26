@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0F766E">
   <title>Dashboard | Quizora</title>
-  <meta name="description" content="Your open class quizzes, courses and semester progress.">
+  <meta name="description" content="Your open class quizzes, subjects and semester progress.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -21,13 +21,7 @@
   <header class="app-navbar">
     <div class="app-container navbar-inner">
       <a href="dashboard.html" class="navbar-brand">
-        <div class="brand-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
-          </svg>
-        </div>
-        <span>Quizora</span>
+        <img src="assets/brand/quizora-logo.svg" alt="Quizora" class="brand-logo">
       </a>
       <nav class="navbar-nav"></nav>
     </div>
@@ -41,15 +35,19 @@
           <div class="page-eyebrow">Student Dashboard</div>
           <h1 class="page-title">Welcome, <span id="student-name">Student</span>!</h1>
           <p id="student-meta" class="page-lead"></p>
+          <div id="student-class"></div>
         </div>
       </section>
+
+      <!-- Shown only to students who haven't chosen their class yet -->
+      <div id="choose-class" class="hidden"></div>
 
       <section class="stat-grid">
         <div class="stat-card">
           <div class="stat-icon" data-icon="book"></div>
           <div class="stat-content">
             <div id="stat-courses" class="stat-value">–</div>
-            <div class="stat-label">Courses Enrolled</div>
+            <div class="stat-label">Subjects</div>
           </div>
         </div>
         <div class="stat-card">
@@ -63,7 +61,7 @@
           <div class="stat-icon" data-icon="trophy"></div>
           <div class="stat-content">
             <div id="stat-average" class="stat-value">–</div>
-            <div class="stat-label">Average Across Courses</div>
+            <div class="stat-label">Average Across Subjects</div>
           </div>
         </div>
       </section>
@@ -80,16 +78,11 @@
 
       <section class="section-block">
         <div class="section-head">
-          <h2 class="section-title">My Courses</h2>
-          <form id="join-form" class="toolbar" autocomplete="off">
-            <label for="join-code" class="sr-only">Course code</label>
-            <input type="text" id="join-code" class="form-control mono" placeholder="Course code" maxlength="12"
-              style="width: 170px; text-transform: uppercase; letter-spacing: 0.1em; padding: 0.55rem 0.85rem;">
-            <button type="submit" id="btn-join" class="btn btn-primary btn-sm">Join Course</button>
-          </form>
+          <h2 class="section-title">My Subjects</h2>
+          <span class="small muted">Every subject of your class, added automatically</span>
         </div>
         <div id="courses-grid" class="grid-cards">
-          <div class="card muted">Loading courses...</div>
+          <div class="card muted">Loading subjects...</div>
         </div>
       </section>
 
@@ -102,7 +95,7 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th>Course</th>
+                <th>Subject</th>
                 <th>Quiz</th>
                 <th class="hide-sm">Submitted</th>
                 <th>Score</th>

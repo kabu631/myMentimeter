@@ -23,13 +23,7 @@
   <header class="app-navbar">
     <div class="app-container navbar-inner">
       <a href="index.html" class="navbar-brand">
-        <div class="brand-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
-          </svg>
-        </div>
-        <span>Quizora</span>
+        <img src="../assets/brand/quizora-logo.svg" alt="Quizora" class="brand-logo">
       </a>
       <nav class="navbar-nav"></nav>
     </div>
@@ -67,10 +61,8 @@
         <section id="view-matrix-pane">
           <div class="section-head no-print">
             <div class="toolbar">
+              <label for="filter-student" class="sr-only">Search students</label>
               <input type="search" id="filter-student" class="form-control" placeholder="Search name or roll no..." style="width: 240px; padding: 0.55rem 0.85rem;">
-              <select id="filter-section" class="form-select" style="width: 180px; padding: 0.55rem 0.85rem;">
-                <option value="all">All sections</option>
-              </select>
             </div>
             <div class="small muted toolbar" style="gap: 0.75rem;">
               <span><span class="score-pill score-high">8</span> ≥ 80%</span>
@@ -78,6 +70,7 @@
               <span><span class="score-pill score-low">3</span> &lt; 50%</span>
               <span><span class="score-pill score-missed">0</span> missed</span>
               <span><span class="score-pill score-none">·</span> open</span>
+              <span><span class="score-pill score-none">–</span> before joining</span>
             </div>
           </div>
 
@@ -94,7 +87,8 @@
           </div>
           <p class="small muted">
             Totals count every quiz a student took plus every closed quiz they missed (scored 0). Open quizzes a student
-            hasn't taken yet aren't counted until they close. Click a name for the full breakdown.
+            hasn't taken yet aren't counted until they close, and quizzes held before a student joined the subject
+            aren't counted at all. Click a name for the full breakdown.
           </p>
         </section>
 
