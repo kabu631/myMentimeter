@@ -31,3 +31,6 @@ Thumbs.db
 
 # Dependencies (if any added in future)
 node_modules/
+
+# Private notes (e.g. the faculty sign-up code) - never publish
+sql/code.txt

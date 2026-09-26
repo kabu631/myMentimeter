@@ -24,7 +24,7 @@
 | `apple-touch-icon.png` (180), `icon-192.png`, `icon-512.png` | Phone home-screen / installed-app icons (see `/manifest.webmanifest`) |
 | `og-image.png` (1200×630) | Link previews when the site or a sign-up link is shared |
 
-- Logo colours belong to the logo only: Q gradient `#016DFC → #6836E9`, navy wordmark, purple sparkle, tagline `#262FE5`. The UI keeps the teal tokens below.
+- The logo uses the site palette so brand and UI match: Q gradient `#14B8A6 → #0F766E` (teal-500 → `--primary`), wordmark `#134E4A` (`--text-primary`), sparkle `#EA580C` (`--accent`), tagline `#0F766E` (`--primary`). The original blue/purple artwork is in git history (commit 72fc5fe).
 - Always place the logo on white or `--bg-primary`; never on the dark teal CTA band.
 - The PNGs are rendered from the SVGs. Regenerate them if the logo changes.
 
