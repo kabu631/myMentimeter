@@ -3,21 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Daily Quiz Session | College Quiz System</title>
-  <meta name="description" content="Take your daily lecture quiz. Interactive multiple-choice questions, progress tracking, and secure server-side scoring.">
+  <title>Quiz | DailyClassQuiz</title>
+  <meta name="description" content="Take your daily class quiz. Answers are graded securely on the server.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
 
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/quiz.css">
 
-  <!-- Supabase Official JS SDK from CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <!-- Header / Navigation -->
   <header class="app-navbar">
     <div class="app-container navbar-inner">
-      <div class="navbar-brand">
+      <a href="dashboard.html" class="navbar-brand">
         <div class="brand-icon">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
@@ -25,202 +24,140 @@
           </svg>
         </div>
         <span id="quiz-header-title">Daily Quiz</span>
-      </div>
-      <div class="navbar-nav">
+      </a>
+      <div class="toolbar">
         <a href="dashboard.html" class="nav-link">Dashboard</a>
+        <button id="btn-top-submit" class="btn btn-primary btn-sm hidden">Submit Quiz</button>
       </div>
-      <button id="btn-top-submit" class="btn btn-primary btn-sm" style="display: none; margin-left: 0.75rem;">Submit Quiz</button>
     </div>
   </header>
 
   <main class="main-content">
     <div class="app-container quiz-runner-container">
 
-      <!-- Loading Placeholder -->
+      <!-- Loading -->
       <div id="quiz-loading-state" class="card" style="text-align: center; padding: 3rem 1.5rem;">
-        <div class="empty-icon" style="margin: 0 auto 0.75rem;">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-          </svg>
-        </div>
-        <h2 style="font-size: 1.35rem; margin-bottom: 0.25rem;">Loading Quiz Session...</h2>
-        <p style="color: var(--text-muted); margin: 0;">Verifying student authorization and loading questions.</p>
+        <h2 style="font-size: 1.35rem; margin-bottom: 0.25rem;">Loading quiz...</h2>
+        <p class="muted" style="margin: 0;">Checking your enrollment and loading questions.</p>
       </div>
 
-      <!-- Error / Notice Box (Hidden by default) -->
-      <div id="quiz-error-state" class="card" style="display: none; text-align: center; padding: 2.5rem 1.5rem; border-left: 4px solid var(--danger);">
-        <div class="empty-icon" style="margin: 0 auto 0.75rem; color: var(--danger); background: #fef2f2; border-color: #fecaca;">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
-        </div>
-        <h2 id="quiz-error-title" style="font-size: 1.35rem; margin-bottom: 0.5rem; color: var(--danger);">Unable to Load Quiz</h2>
-        <p id="quiz-error-message" style="color: var(--text-secondary); max-width: 480px; margin: 0 auto 1.5rem;"></p>
-        <a href="dashboard.html" class="btn btn-outline">&larr; Return to Dashboard</a>
+      <!-- Error / notice -->
+      <div id="quiz-error-state" class="card hidden" style="text-align: center; padding: 2.5rem 1.5rem; border-left: 4px solid var(--danger);">
+        <h2 id="quiz-error-title" style="font-size: 1.35rem; margin-bottom: 0.5rem; color: var(--danger);">Unable to load quiz</h2>
+        <p id="quiz-error-message" style="max-width: 480px; margin: 0 auto 1.5rem;"></p>
+        <a href="dashboard.html" class="btn btn-outline">&larr; Back to Dashboard</a>
       </div>
 
-      <!-- COMPLETION / RESULT CARD (Shown after submission or if already attempted) -->
-      <div id="quiz-completion-state" class="card" style="display: none; text-align: center; padding: 3rem 2rem; max-width: 600px; margin: 0 auto;">
-        <div style="margin-bottom: 0.5rem;">
-          <span id="completion-class-badge" class="badge badge-published" style="font-size: 0.85rem; padding: 0.35rem 0.85rem;">
-            Completed
-          </span>
+      <!-- Completion -->
+      <div id="quiz-completion-state" class="card hidden" style="text-align: center; padding: 3rem 2rem; max-width: 600px; margin: 0 auto;">
+        <span id="completion-class-badge" class="badge badge-published">Completed</span>
+        <h1 id="completion-quiz-title" style="font-size: 1.75rem; margin: 0.75rem 0 0.35rem;">Quiz submitted</h1>
+        <p id="completion-course" class="muted" style="margin-bottom: 1.5rem;"></p>
+
+        <div id="completion-score-box" class="results-card" style="margin: 0 auto 1.5rem; padding: 0;">
+          <div class="score-display-ring">
+            <div id="completion-score" class="score-main-number">0</div>
+            <div class="score-total-number">out of <span id="completion-total">0</span></div>
+          </div>
+          <span id="completion-accuracy" class="badge badge-published" style="font-size: 0.9rem;">0%</span>
         </div>
 
-        <h1 id="completion-quiz-title" style="font-size: 1.85rem; margin-bottom: 0.5rem;">Quiz Finished</h1>
-        <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.75rem;">
-          Your attempt has been securely evaluated and recorded in the database.
-        </p>
-
-        <!-- Final Score Showcase -->
-        <div style="background: radial-gradient(circle, rgba(79, 70, 229, 0.08) 0%, transparent 75%); border: 3px solid var(--primary); border-radius: var(--radius-xl); padding: 1.75rem; margin-bottom: 1.5rem; box-shadow: var(--shadow-sm);">
-          <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;">
-            Final Score
-          </div>
-          <div style="font-family: var(--font-heading); font-size: 3rem; font-weight: 800; color: var(--text-primary); line-height: 1;">
-            Score: <span id="completion-score" style="color: var(--success);">8</span> / <span id="completion-total">10</span>
-          </div>
-          <div style="margin-top: 0.5rem;">
-            <span id="completion-accuracy" class="badge badge-published" style="font-size: 0.9rem;">80% Accuracy</span>
-          </div>
+        <div id="completion-hidden-note" class="alert alert-info hidden" style="text-align: left;">
+          Your answers are saved. Your teacher will release scores when this quiz closes — check your Results page then.
         </div>
 
-        <div style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
-          <a href="dashboard.html" class="btn btn-primary">Return to Student Dashboard &rarr;</a>
-          <a href="results.html" class="btn btn-outline">View Complete Results &rarr;</a>
+        <div class="toolbar" style="justify-content: center;">
+          <a href="dashboard.html" class="btn btn-primary">Back to Dashboard</a>
+          <a id="completion-review-link" href="results.html" class="btn btn-outline">View in Results &rarr;</a>
         </div>
       </div>
 
-      <!-- ACTIVE QUIZ ENGINE CONTAINER -->
-      <div id="quiz-active-engine" style="display: none;">
+      <!-- Active quiz -->
+      <div id="quiz-active-engine" class="hidden">
 
-        <!-- 1. Header Bar: Class Badge, Quiz Title, and Timer -->
         <div class="quiz-header-bar">
-          <div class="quiz-meta-info">
+          <div class="quiz-meta-info" style="flex-wrap: wrap;">
             <span id="quiz-class-badge" class="quiz-class-badge">Class --</span>
-            <span id="quiz-subline-title" style="font-weight: 600; color: var(--text-secondary); font-size: 0.95rem;"></span>
+            <span id="quiz-subline-title" class="strong small"></span>
           </div>
-
-          <div id="quiz-timer-pill" class="quiz-timer-pill">
+          <div id="quiz-timer-pill" class="quiz-timer-pill hidden" title="Time remaining">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <polyline points="12 6 12 12 16 14"/>
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
             </svg>
             <span id="timer-countdown">--:--</span>
           </div>
         </div>
 
-        <!-- 2. Quiz Progress Meter -->
-        <div class="quiz-progress-section" aria-label="Quiz Progress">
+        <div class="quiz-progress-section" aria-label="Quiz progress">
           <div class="quiz-progress-text">
-            <div style="display: flex; align-items: center; gap: 0.6rem;">
-              <span>Question <strong id="q-counter-current">1</strong> of <strong id="q-counter-total">10</strong></span>
-              <span id="quiz-percentage-badge" class="badge badge-primary" style="font-size: 0.75rem;">10% Complete</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <span id="answered-status-label" class="badge badge-published" style="font-size: 0.75rem; text-transform: none; letter-spacing: 0;">
-                0 of 10 answered
-              </span>
-            </div>
+            <span>Question <strong id="q-counter-current">1</strong> of <strong id="q-counter-total">1</strong></span>
+            <span id="answered-status-label" class="badge badge-primary" style="text-transform: none; letter-spacing: 0;">0 answered</span>
           </div>
-          <div class="progress-container" style="height: 10px; background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);">
-            <div id="quiz-progress-fill" class="progress-fill" style="width: 10%;" role="progressbar" aria-valuenow="10" aria-valuemin="0" aria-valuemax="100"></div>
+          <div class="progress-container" style="height: 10px;">
+            <div id="quiz-progress-fill" class="progress-fill" style="width: 0%;" role="progressbar" aria-valuemin="0" aria-valuemax="100"></div>
           </div>
         </div>
 
-        <!-- 3. Question Card -->
         <article class="question-card" aria-live="polite">
           <div class="question-topline">
             <span id="question-index-tag" class="question-number-tag">Question 1</span>
-            <span id="question-points-tag" class="question-marks-tag">1.0 pt</span>
+            <span id="question-points-tag" class="question-marks-tag">1 mark</span>
           </div>
-
-          <!-- Question Prompt -->
-          <h1 id="question-prompt" class="question-prompt">
-            Loading prompt...
-          </h1>
-
-          <!-- Four Multiple Choice Options -->
-          <div id="options-container" class="options-list" role="radiogroup" aria-label="Multiple Choice Options">
-            <!-- Dynamically populated option cards -->
-          </div>
+          <h1 id="question-prompt" class="question-prompt" style="white-space: pre-wrap;"></h1>
+          <div id="options-container" class="options-list" role="radiogroup" aria-label="Answer options"></div>
         </article>
 
-        <!-- 4. Navigation Controls -->
         <div class="quiz-nav-toolbar">
-          <button id="btn-prev" class="btn btn-secondary" disabled>
-            &larr; Previous
-          </button>
-
-          <div style="display: flex; gap: 0.75rem;">
-            <button id="btn-next" class="btn btn-primary">
-              Next &rarr;
-            </button>
-            <button id="btn-bottom-submit" class="btn btn-success">
-              Submit Quiz
-            </button>
+          <button id="btn-prev" class="btn btn-secondary" disabled>&larr; Previous</button>
+          <div class="toolbar">
+            <button id="btn-next" class="btn btn-primary">Next &rarr;</button>
+            <button id="btn-bottom-submit" class="btn btn-success">Submit Quiz</button>
           </div>
         </div>
 
-        <!-- 5. Question Jump Palette -->
         <div class="question-palette-box">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+          <div class="section-head" style="margin-bottom: 0.75rem;">
             <div class="palette-title" style="margin: 0;">Question Navigator</div>
-            <div style="font-size: 0.8rem; color: var(--text-muted); display: flex; gap: 1rem;">
-              <span style="display: flex; align-items: center; gap: 0.35rem;">
-                <span style="width: 10px; height: 10px; border-radius: 50%; background: var(--success); display: inline-block;"></span> Answered
-              </span>
-              <span style="display: flex; align-items: center; gap: 0.35rem;">
-                <span style="width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.15); display: inline-block;"></span> Unanswered
-              </span>
+            <div class="small muted toolbar" style="gap: 1rem;">
+              <span class="toolbar" style="gap: 0.35rem;"><span style="width: 10px; height: 10px; border-radius: 50%; background: var(--success);"></span> Answered</span>
+              <span class="toolbar" style="gap: 0.35rem;"><span style="width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--border-hover);"></span> Unanswered</span>
             </div>
           </div>
-          <div id="palette-grid" class="palette-grid">
-            <!-- Injected dynamically -->
-          </div>
+          <div id="palette-grid" class="palette-grid"></div>
+          <p class="small muted" style="margin: 0.75rem 0 0;">Tip: press A–F to choose an option and ← → to move between questions.</p>
         </div>
-
       </div>
 
     </div>
   </main>
 
-  <!-- Final Submission Confirmation Modal -->
-  <div id="submit-modal" class="modal-backdrop">
+  <!-- Submit confirmation -->
+  <div id="submit-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="submit-modal-title">
     <div class="modal-dialog">
       <div class="modal-header">
-        <h3 class="modal-title">Confirm Quiz Submission</h3>
+        <h3 id="submit-modal-title" class="modal-title">Submit your answers?</h3>
       </div>
       <div class="modal-body">
-        <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-          Once submitted, your answers will be graded by the database. <strong>Only one attempt is permitted per quiz.</strong>
-        </p>
-
-        <div class="card" style="background: var(--bg-glass); margin-bottom: 1rem; padding: 1rem;">
+        <p style="margin-bottom: 1rem;">Your answers will be graded right away. <strong>You only get one attempt.</strong></p>
+        <div class="card" style="background: var(--bg-glass); margin-bottom: 1rem; padding: 1rem; box-shadow: none;">
           <div style="display: flex; justify-content: space-between; font-weight: 600;">
-            <span>Questions Answered:</span>
-            <span id="modal-answered-summary" style="color: var(--primary);">0 of 0</span>
+            <span>Questions answered</span>
+            <span id="modal-answered-summary" class="text-primary">0 of 0</span>
           </div>
         </div>
-
-        <div id="modal-unanswered-alert" class="alert alert-warning" style="display: none; margin-bottom: 0;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          <span>You have unanswered questions. Are you sure you want to finish now?</span>
-        </div>
+        <div id="modal-unanswered-alert" class="alert alert-warning hidden" style="margin-bottom: 0;"></div>
       </div>
       <div class="modal-footer">
-        <button id="btn-modal-cancel" class="btn btn-outline">Keep Answering</button>
-        <button id="btn-modal-confirm" class="btn btn-primary">Confirm &amp; Submit Score</button>
+        <button id="btn-modal-cancel" class="btn btn-outline">Keep answering</button>
+        <button id="btn-modal-confirm" class="btn btn-primary">Submit &amp; get score</button>
       </div>
     </div>
   </div>
 
   <footer class="app-footer">
     <div class="app-container footer-inner">
-      <div>Daily Quiz System &copy; 2026. Department of Computer Science.</div>
-      <div>Automated Anti-Cheat Evaluation &bull; Academic Portal</div>
+      <div>DailyClassQuiz &copy; 2026</div>
+      <div>Answers are graded on the server</div>
     </div>
   </footer>
 

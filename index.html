@@ -3,54 +3,95 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Daily College Quiz System</title>
-  <meta name="description" content="College daily class quiz portal for CS-301 DBMS.">
-  
+  <title>DailyClassQuiz | Quick quizzes after every class</title>
+  <meta name="description" content="Free daily class quiz portal. Teachers publish a short quiz after each lecture, students get their score instantly, and semester totals are calculated automatically.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/auth.css">
 
-  <!-- Supabase JS CDN (Official v2) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .hero { text-align: center; max-width: 760px; margin: 1.5rem auto 3rem; }
+    .hero h1 { font-size: 2.6rem; margin: 0.75rem 0; }
+    .hero p { font-size: 1.1rem; }
+    .hero-actions { display: flex; justify-content: center; gap: 0.75rem; flex-wrap: wrap; margin-top: 1.75rem; }
+    .feature-list { list-style: none; display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.75rem; }
+    .feature-list li { display: flex; gap: 0.6rem; align-items: flex-start; color: var(--text-secondary); font-size: 0.95rem; }
+    .feature-list svg { width: 18px; height: 18px; color: var(--success); flex-shrink: 0; margin-top: 3px; }
+    @media (max-width: 640px) { .hero h1 { font-size: 1.9rem; } }
+  </style>
 </head>
 <body>
-  <div class="auth-wrapper" style="min-height: 100vh;">
-    <div class="card" style="text-align: center; max-width: 440px; padding: 2.5rem 1.5rem; margin: auto;">
-      <div class="auth-logo" style="margin: 0 auto 1.25rem;">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-          <path d="M6 12v5c3 3 9 3 12 0v-5"/>
-        </svg>
-      </div>
-      <h1 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Daily College Quiz System</h1>
-      <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.5rem;">
-        Connecting to portal session...
-      </p>
-      <div style="display: flex; justify-content: center; gap: 0.75rem;">
-        <a href="login.html" class="btn btn-primary">Sign In &rarr;</a>
-        <a href="register.html" class="btn btn-outline">Register</a>
-      </div>
+  <header class="app-navbar">
+    <div class="app-container navbar-inner">
+      <a href="index.html" class="navbar-brand">
+        <div class="brand-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+          </svg>
+        </div>
+        <span>DailyClassQuiz</span>
+      </a>
+      <nav class="navbar-nav">
+        <a href="login.html" class="nav-link">Sign In</a>
+        <a href="register.html" class="btn btn-primary btn-sm">Create Account</a>
+      </nav>
     </div>
-  </div>
+  </header>
+
+  <main class="main-content">
+    <div class="app-container">
+      <section class="hero">
+        <span class="badge badge-primary">Free for every class</span>
+        <h1>A quick quiz after every class.<br>Scores in seconds.</h1>
+        <p>Teachers publish a short multiple-choice quiz when the lecture ends. Students answer on their phone,
+          get their score instantly, and the whole semester's marks add up automatically.</p>
+        <div class="hero-actions">
+          <a href="register.html" class="btn btn-primary btn-lg">Create an account &rarr;</a>
+          <a href="login.html" class="btn btn-secondary btn-lg">Sign in</a>
+        </div>
+      </section>
+
+      <section class="grid-cards" style="max-width: 900px; margin: 0 auto;">
+        <div class="card">
+          <div class="page-eyebrow">For students</div>
+          <h3>Join, answer, see your score</h3>
+          <ul class="feature-list">
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Join each course with the code your teacher shares</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>See every open quiz from all your courses in one place</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Your profile shows your running semester marks for each course</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="page-eyebrow">For teachers</div>
+          <h3>Create, publish, grade automatically</h3>
+          <ul class="feature-list">
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Run several courses and sections from one account</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Answers are graded in the database — the key never reaches students' browsers</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Semester gradebook with weighted final marks and CSV export</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="app-footer">
+    <div class="app-container footer-inner">
+      <div>DailyClassQuiz &copy; 2026</div>
+      <div>Hosted free on GitHub Pages &bull; Data by Supabase</div>
+    </div>
+  </footer>
 
   <script type="module">
-    import { getUserProfile } from './js/auth.js';
+    import { getUserProfile, homeUrlFor } from './js/auth.js';
 
-    async function routeEntry() {
-      try {
-        const profile = await getUserProfile();
-        if (profile) {
-          const isAdmin = (profile.role === 'admin' || profile.role === 'teacher');
-          window.location.replace(isAdmin ? 'admin/index.html' : 'dashboard.html');
-        } else {
-          window.location.replace('login.html');
-        }
-      } catch (e) {
-        window.location.replace('login.html');
-      }
-    }
-
-    routeEntry();
+    // Signed-in users (including those arriving from an email confirmation link) go straight home
+    getUserProfile().then(profile => {
+      if (profile) window.location.replace(homeUrlFor(profile));
+    }).catch(() => {});
   </script>
 </body>
 </html>

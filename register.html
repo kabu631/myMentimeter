@@ -3,21 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Student Registration | Daily College Quiz System</title>
-  <meta name="description" content="Register your student account for college daily class quizzes. Track attendance, complete quizzes, and view cumulative scores.">
+  <title>Create Account | DailyClassQuiz</title>
+  <meta name="description" content="Create a student or teacher account for daily class quizzes.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
 
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/auth.css">
 
-  <!-- Supabase Official JS SDK from CDN (Safe for static GitHub Pages) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <!-- Header / Navigation -->
   <header class="app-navbar">
     <div class="app-container navbar-inner">
-      <div class="navbar-brand">
+      <a href="index.html" class="navbar-brand">
         <div class="brand-icon">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
@@ -25,7 +24,7 @@
           </svg>
         </div>
         <span>DailyClassQuiz</span>
-      </div>
+      </a>
       <div class="navbar-nav">
         <a href="login.html" class="nav-link">Sign In</a>
       </div>
@@ -35,181 +34,152 @@
   <main class="main-content">
     <div class="auth-wrapper">
       <div class="auth-card">
-        
+
         <div class="auth-header">
           <div class="auth-logo">
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-              <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>
             </svg>
           </div>
-          <div style="font-size: 0.78rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.35rem;">
-            Department of Computer Science &bull; CS-301
-          </div>
-          <h1 class="auth-title">Student Registration</h1>
-          <p class="auth-subtitle">Enroll once with your college roll number and class section</p>
+          <h1 class="auth-title">Create your account</h1>
+          <p id="register-subtitle" class="auth-subtitle">Register once, then join each of your courses with its code</p>
         </div>
 
-        <!-- Alert Notification Box -->
+        <div class="segmented" role="tablist" aria-label="Account type">
+          <button type="button" id="type-student" class="active" role="tab" aria-selected="true">I'm a Student</button>
+          <button type="button" id="type-teacher" role="tab" aria-selected="false">I'm a Teacher</button>
+        </div>
+
         <div id="register-alert" class="alert alert-danger" style="display: none;" role="alert"></div>
 
-        <!-- Registration Form -->
         <form id="form-register" novalidate>
-          
           <div class="form-group">
             <label class="form-label" for="reg-fullname">Full Name</label>
-            <input 
-              type="text" 
-              id="reg-fullname" 
-              class="form-control" 
-              placeholder="e.g. John Doe" 
-              required 
-              autocomplete="name"
-            >
+            <input type="text" id="reg-fullname" class="form-control" placeholder="e.g. Sita Sharma" required autocomplete="name">
           </div>
 
-          <div class="form-row">
+          <div class="form-row student-only">
             <div class="form-group">
-              <label class="form-label" for="reg-student-id">Student ID / Roll No.</label>
-              <input 
-                type="text" 
-                id="reg-student-id" 
-                class="form-control" 
-                placeholder="e.g. CS-2026-042" 
-                required
-              >
+              <label class="form-label" for="reg-student-id">Roll / Registration No.</label>
+              <input type="text" id="reg-student-id" class="form-control" placeholder="e.g. CS-2026-042" autocomplete="off">
             </div>
+            <div class="form-group">
+              <label class="form-label" for="reg-section">Section <span class="muted">(optional)</span></label>
+              <input type="text" id="reg-section" class="form-control" placeholder="e.g. A">
+            </div>
+          </div>
 
-            <div class="form-group">
-              <label class="form-label" for="reg-section">Class Section</label>
-              <input 
-                type="text" 
-                id="reg-section" 
-                class="form-control" 
-                placeholder="e.g. Section A" 
-                required
-              >
-            </div>
+          <div class="form-group teacher-only hidden">
+            <label class="form-label" for="reg-faculty-code">Faculty Sign-up Code</label>
+            <input type="text" id="reg-faculty-code" class="form-control mono" placeholder="XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
+            <span class="input-hint">Ask your administrator. This keeps student accounts from registering as teachers.</span>
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="reg-email">College Email Address</label>
-            <input 
-              type="email" 
-              id="reg-email" 
-              class="form-control" 
-              placeholder="e.g. john.doe@college.edu" 
-              required 
-              autocomplete="email"
-            >
+            <label class="form-label" for="reg-email">Email Address</label>
+            <input type="email" id="reg-email" class="form-control" placeholder="you@college.edu" required autocomplete="email">
           </div>
 
           <div class="form-group">
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <label class="form-label" for="reg-password">Create Password</label>
-              <button type="button" id="toggle-password-btn" style="background: none; border: none; color: var(--primary); font-size: 0.8rem; cursor: pointer; padding: 0;">
-                Show
-              </button>
+              <button type="button" id="toggle-password-btn" class="link-button">Show</button>
             </div>
-            <input 
-              type="password" 
-              id="reg-password" 
-              class="form-control" 
-              placeholder="At least 6 characters" 
-              minlength="6" 
-              required 
-              autocomplete="new-password"
-            >
-            <span class="input-hint">Your password is encrypted securely</span>
+            <input type="password" id="reg-password" class="form-control" placeholder="At least 6 characters" minlength="6" required autocomplete="new-password">
           </div>
 
-          <button type="submit" id="btn-submit-register" class="btn btn-primary btn-block btn-lg" style="margin-top: 1.5rem;">
-            <span>Complete Registration &rarr;</span>
+          <button type="submit" id="btn-submit-register" class="btn btn-primary btn-block btn-lg" style="margin-top: 1rem;">
+            Create Account &rarr;
           </button>
         </form>
 
-        <div class="auth-divider">Already have an account?</div>
-
-        <div style="text-align: center;">
-          <a href="login.html" class="btn btn-secondary btn-block">
-            Sign In with Existing Account
-          </a>
-        </div>
-
+        <div class="auth-divider">Already registered?</div>
+        <a href="login.html" class="btn btn-secondary btn-block">Sign in instead</a>
       </div>
     </div>
   </main>
 
   <footer class="app-footer">
     <div class="app-container footer-inner">
-      <div>Daily Quiz System &copy; 2026. Department of Computer Science.</div>
-      <div>Academic Evaluation Portal</div>
+      <div>DailyClassQuiz &copy; 2026</div>
+      <div>Graded securely in the database</div>
     </div>
   </footer>
 
   <script type="module">
-    import { registerStudent, getUserProfile } from './js/auth.js';
+    import { registerUser, getUserProfile, homeUrlFor } from './js/auth.js';
     import { showToast } from './js/supabase.js';
+    import { setBusy } from './js/utils.js';
 
-    // If user is already logged in, redirect automatically
-    async function checkSession() {
-      const profile = await getUserProfile();
-      if (profile) {
-        window.location.href = (profile.role === 'admin' || profile.role === 'teacher') 
-          ? 'admin.html' 
-          : 'dashboard.html';
-      }
+    getUserProfile().then(profile => {
+      if (profile) window.location.replace(homeUrlFor(profile));
+    });
+
+    let accountType = new URLSearchParams(window.location.search).get('as') === 'teacher' ? 'teacher' : 'student';
+
+    function applyAccountType() {
+      const teacher = accountType === 'teacher';
+      document.getElementById('type-student').classList.toggle('active', !teacher);
+      document.getElementById('type-teacher').classList.toggle('active', teacher);
+      document.getElementById('type-student').setAttribute('aria-selected', String(!teacher));
+      document.getElementById('type-teacher').setAttribute('aria-selected', String(teacher));
+      document.querySelectorAll('.student-only').forEach(el => el.classList.toggle('hidden', teacher));
+      document.querySelectorAll('.teacher-only').forEach(el => el.classList.toggle('hidden', !teacher));
+      document.getElementById('register-subtitle').textContent = teacher
+        ? 'Create courses, publish quizzes and track semester marks'
+        : 'Register once, then join each of your courses with its code';
     }
-    checkSession();
 
-    // Password visibility toggle
+    document.getElementById('type-student').addEventListener('click', () => { accountType = 'student'; applyAccountType(); });
+    document.getElementById('type-teacher').addEventListener('click', () => { accountType = 'teacher'; applyAccountType(); });
+    applyAccountType();
+
     const passwordInput = document.getElementById('reg-password');
     const toggleBtn = document.getElementById('toggle-password-btn');
     toggleBtn.addEventListener('click', () => {
-      const isPassword = passwordInput.type === 'password';
-      passwordInput.type = isPassword ? 'text' : 'password';
-      toggleBtn.textContent = isPassword ? 'Hide' : 'Show';
+      const show = passwordInput.type === 'password';
+      passwordInput.type = show ? 'text' : 'password';
+      toggleBtn.textContent = show ? 'Hide' : 'Show';
     });
 
-    // Form submission
     const form = document.getElementById('form-register');
     const alertBox = document.getElementById('register-alert');
-    const submitBtn = document.getElementById('btn-submit-register');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const submitBtn = document.getElementById('btn-submit-register');
       alertBox.style.display = 'none';
 
-      const fullName = document.getElementById('reg-fullname').value;
-      const studentId = document.getElementById('reg-student-id').value;
-      const section = document.getElementById('reg-section').value;
-      const email = document.getElementById('reg-email').value;
-      const password = document.getElementById('reg-password').value;
-
-      // Enter loading state
-      submitBtn.disabled = true;
-      submitBtn.innerHTML = '<span>Creating Account...</span>';
-
-      const result = await registerStudent({
-        fullName,
-        studentId,
-        section,
-        email,
-        password
+      setBusy(submitBtn, true, 'Creating account...');
+      const result = await registerUser({
+        accountType,
+        fullName: document.getElementById('reg-fullname').value,
+        studentId: document.getElementById('reg-student-id').value,
+        section: document.getElementById('reg-section').value,
+        facultyCode: document.getElementById('reg-faculty-code').value,
+        email: document.getElementById('reg-email').value,
+        password: passwordInput.value
       });
 
       if (!result.success) {
-        // Show error and exit loading state
+        alertBox.className = 'alert alert-danger';
         alertBox.textContent = result.error;
         alertBox.style.display = 'block';
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '<span>Complete Registration &rarr;</span>';
-      } else {
-        showToast('Account created successfully! Redirecting to dashboard...', 'success');
-        setTimeout(() => {
-          window.location.href = result.redirectUrl || 'dashboard.html';
-        }, 600);
+        setBusy(submitBtn, false);
+        return;
       }
+
+      if (result.needsConfirmation) {
+        form.reset();
+        setBusy(submitBtn, false);
+        alertBox.className = 'alert alert-success';
+        alertBox.textContent = 'Account created! We sent you a confirmation email — click the link in it, then sign in.';
+        alertBox.style.display = 'block';
+        return;
+      }
+
+      showToast('Account created! Taking you to your dashboard...', 'success');
+      setTimeout(() => { window.location.href = result.redirectUrl; }, 600);
     });
   </script>
 </body>

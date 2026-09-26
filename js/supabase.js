@@ -1,6 +1,6 @@
 /**
  * ==============================================================================
- * js/supabase.js - Centralized Supabase Client Singleton & Connection Testing
+ * js/supabase.js - Centralized Supabase Client Singleton & Toast Notifications
  * ==============================================================================
  * Safe frontend configuration for static GitHub Pages hosting.
  * Uses ONLY the public Project URL and Anon/Publishable Key.
@@ -13,14 +13,13 @@ let supabaseClient = null;
 
 /**
  * Returns a singleton instance of the Supabase JavaScript client.
- * Compatible with static GitHub Pages hosting (loads via CDN or window.supabase).
+ * Compatible with static GitHub Pages hosting (loads via CDN as window.supabase).
  */
 export function getSupabase() {
   if (supabaseClient) {
     return supabaseClient;
   }
 
-  // Ensure the Supabase JS library is loaded in the browser
   if (typeof window.supabase === 'undefined') {
     console.error(
       'Supabase client library is not loaded. ' +
@@ -29,7 +28,6 @@ export function getSupabase() {
     return null;
   }
 
-  // Safety check: verify project URL and anon key are populated
   if (!APP_CONFIG.IS_CONFIGURED()) {
     console.warn('Supabase URL or Anon key has not been configured yet in js/config.js.');
     return null;
@@ -57,57 +55,8 @@ export function getSupabase() {
 }
 
 /**
- * Diagnostic function: Tests that the Supabase client can initialize
- * and communicate with the Supabase Auth and Database services.
- */
-export async function testSupabaseConnection() {
-  const client = getSupabase();
-
-  if (!client) {
-    return {
-      success: false,
-      message: 'Failed to initialize Supabase client. Check script tags and credentials.'
-    };
-  }
-
-  try {
-    // 1. Test Auth Service
-    const { data: sessionData, error: sessionErr } = await client.auth.getSession();
-    if (sessionErr) throw sessionErr;
-
-    // 2. Test Database Reachability (queries public schema)
-    const { data: dbData, error: dbErr } = await client
-      .from('quizzes')
-      .select('id, title, class_number')
-      .limit(1);
-
-    if (dbErr && dbErr.code !== 'PGRST116') {
-      // If table doesn't exist yet, note it, but connection itself succeeded
-      return {
-        success: true,
-        authConnected: true,
-        dbConnected: false,
-        message: 'Connected to Supabase, but database tables need to be created via SQL Editor.'
-      };
-    }
-
-    return {
-      success: true,
-      authConnected: true,
-      dbConnected: true,
-      data: dbData,
-      message: 'Supabase client initialized and connected to both Auth and PostgreSQL database successfully!'
-    };
-  } catch (err) {
-    return {
-      success: false,
-      message: 'Connection failed: ' + err.message
-    };
-  }
-}
-
-/**
- * Lightweight Toast Notification Utility for UI Feedback
+ * Lightweight Toast Notification Utility for UI Feedback.
+ * The message is rendered as plain text.
  */
 export function showToast(message, type = 'info') {
   let container = document.getElementById('toast-container');
@@ -115,6 +64,8 @@ export function showToast(message, type = 'info') {
     container = document.createElement('div');
     container.id = 'toast-container';
     container.className = 'toast-container';
+    container.setAttribute('role', 'status');
+    container.setAttribute('aria-live', 'polite');
     document.body.appendChild(container);
   }
 
@@ -128,11 +79,15 @@ export function showToast(message, type = 'info') {
     danger: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`
   };
 
-  toast.innerHTML = `
-    <span class="toast-icon">${iconMap[type] || iconMap.info}</span>
-    <span style="flex: 1;">${message}</span>
-  `;
+  const icon = document.createElement('span');
+  icon.className = 'toast-icon';
+  icon.innerHTML = iconMap[type] || iconMap.info;
 
+  const text = document.createElement('span');
+  text.style.flex = '1';
+  text.textContent = message;
+
+  toast.append(icon, text);
   container.appendChild(toast);
 
   setTimeout(() => {

@@ -1,373 +1,362 @@
 /**
- * quiz-builder.js - Dynamic Quiz & Question Editor for Teachers
+ * ==============================================================================
+ * js/quiz-builder.js - Create / edit a quiz and its questions
+ * ==============================================================================
+ * URL: create-quiz.html?course=<id> (new) or create-quiz.html?id=<quizId> (edit)
+ * Saves through the save_quiz() database function so the quiz and all of its
+ * questions are written in a single transaction.
  */
 
 import { getSupabase, showToast } from './supabase.js';
-import { requireAuth } from './auth.js';
+import { guardAdminPage, loadTeacherCourses, pickActiveCourseId, rememberActiveCourse, noCoursesHtml } from './admin-service.js';
+import { escapeHtml, courseLabel, todayIso, toLocalInput, fromLocalInput, fmtNum, friendlyError } from './utils.js';
 
-let currentTeacher = null;
-let editingQuizId = null;
-let hasExistingAttempts = false;
+const OPTION_IDS = ['A', 'B', 'C', 'D', 'E', 'F'];
+const $ = (id) => document.getElementById(id);
+
+let courses = [];
+let editingQuiz = null;
+let isLocked = false;
 let questions = [];
+let isDirty = false;
+let isSaving = false;
+
+function blankQuestion(type = 'single_choice') {
+  if (type === 'true_false') {
+    return { type, text: '', marks: 1, correct: 'A', options: [{ id: 'A', text: 'True' }, { id: 'B', text: 'False' }] };
+  }
+  return { type, text: '', marks: 1, correct: 'A', options: OPTION_IDS.slice(0, 4).map(id => ({ id, text: '' })) };
+}
 
 async function initBuilder() {
-  currentTeacher = await requireAuth('teacher');
-  if (!currentTeacher) return;
-
-  const urlParams = new URLSearchParams(window.location.search);
-  editingQuizId = urlParams.get('id');
-
-  // Set minimum date to today in local timezone
-  const now = new Date();
-  const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  const dateInput = document.getElementById('quiz-date');
-  dateInput.min = localToday;
-  dateInput.value = localToday;
-
-  if (editingQuizId) {
-    document.getElementById('builder-page-title').textContent = 'Edit Daily Quiz';
-    await loadExistingQuiz(editingQuizId);
-  } else {
-    // New quiz: add default first question
-    addQuestionObject();
-    renderQuestionsList();
-  }
-
-  setupEventListeners();
-}
-
-/**
- * Loads an existing quiz and its questions
- */
-async function loadExistingQuiz(quizId) {
-  const supabase = getSupabase();
-  if (!supabase) return;
+  const teacher = await guardAdminPage();
+  if (!teacher) return;
 
   try {
-    // 1. Fetch Quiz Info
-    const { data: quiz, error: qErr } = await supabase
-      .from('quizzes')
-      .select('*')
-      .eq('id', quizId)
-      .single();
-
-    if (qErr || !quiz) throw new Error('Quiz not found.');
-
-    document.getElementById('quiz-class-number').value = quiz.class_number;
-    document.getElementById('quiz-title').value = quiz.title;
-    document.getElementById('quiz-date').value = quiz.scheduled_date;
-    document.getElementById('quiz-description').value = quiz.description || '';
-    document.getElementById('quiz-time-limit').value = quiz.time_limit_minutes || '';
-    document.getElementById('quiz-show-score').checked = quiz.show_score_immediately;
-    document.getElementById('quiz-show-answers').checked = quiz.show_correct_answers;
-
-    // 2. Check for attempts
-    const { count: attemptCount } = await supabase
-      .from('quiz_attempts')
-      .select('*', { count: 'exact', head: true })
-      .eq('quiz_id', quizId);
-
-    if (attemptCount && attemptCount > 0) {
-      hasExistingAttempts = true;
-      document.getElementById('attempts-warning-banner').style.display = 'block';
-      document.getElementById('attempts-count-text').textContent = attemptCount;
-      document.getElementById('btn-add-question').disabled = true;
-    }
-
-    // 3. Fetch Questions (Teachers have full SELECT on correct_option via RLS)
-    const { data: qData, error: questErr } = await supabase
-      .from('questions')
-      .select('*')
-      .eq('quiz_id', quizId)
-      .order('order_index', { ascending: true });
-
-    if (questErr) throw questErr;
-
-    if (qData && qData.length > 0) {
-      questions = qData.map(q => ({
-        id: q.id,
-        text: q.question_text,
-        marks: q.marks,
-        options: q.options || [
-          { id: 'A', text: '' },
-          { id: 'B', text: '' },
-          { id: 'C', text: '' },
-          { id: 'D', text: '' }
-        ],
-        correctOption: q.correct_option || 'A'
-      }));
-    } else {
-      addQuestionObject();
-    }
-
-    renderQuestionsList();
-
+    courses = await loadTeacherCourses();
   } catch (err) {
-    console.error('Error loading quiz:', err);
-    showToast('Failed to load quiz: ' + err.message, 'danger');
+    showToast(friendlyError(err), 'danger');
+    return;
   }
+
+  if (courses.length === 0) {
+    $('no-course').innerHTML = noCoursesHtml();
+    $('no-course').classList.remove('hidden');
+    return;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const quizId = params.get('id');
+
+  const select = $('field-course');
+  courses.forEach(c => select.add(new Option(courseLabel(c) + (c.is_archived ? ' — archived' : ''), c.id)));
+
+  if (quizId) {
+    const ok = await loadQuiz(quizId);
+    if (!ok) return;
+  } else {
+    select.value = pickActiveCourseId(courses);
+    $('field-date').value = todayIso();
+    await suggestClassNumber();
+    questions = [blankQuestion()];
+  }
+
+  updateBackLinks();
+  $('builder').classList.remove('hidden');
+  renderQuestions();
+  setupEvents();
 }
 
-function addQuestionObject() {
-  questions.push({
-    id: null,
-    text: '',
-    marks: 1.0,
-    options: [
-      { id: 'A', text: '' },
-      { id: 'B', text: '' },
-      { id: 'C', text: '' },
-      { id: 'D', text: '' }
-    ],
-    correctOption: 'A'
-  });
+async function loadQuiz(quizId) {
+  const supabase = getSupabase();
+  const { data: quiz, error } = await supabase.from('quizzes').select('*, quiz_attempts(count)').eq('id', quizId).maybeSingle();
+  if (error || !quiz) {
+    showToast(error ? friendlyError(error) : 'Quiz not found, or it belongs to another teacher.', 'danger');
+    return false;
+  }
+
+  editingQuiz = quiz;
+  const attemptCount = quiz.quiz_attempts?.[0]?.count || 0;
+  isLocked = attemptCount > 0;
+
+  $('page-heading').textContent = 'Edit Quiz';
+  $('field-course').value = quiz.course_id;
+  $('field-course').disabled = isLocked;
+  $('field-class-number').value = quiz.class_number;
+  $('field-title').value = quiz.title;
+  $('field-date').value = quiz.scheduled_date;
+  $('field-time-limit').value = quiz.time_limit_minutes || '';
+  $('field-description').value = quiz.description || '';
+  $('field-closes-at').value = toLocalInput(quiz.closes_at);
+  $('field-show-score').checked = quiz.show_score_immediately;
+  $('field-show-answers').checked = quiz.show_correct_answers;
+  $('btn-save-publish').innerHTML = { draft: 'Publish now &rarr;', published: 'Save &amp; keep published', closed: 'Save changes' }[quiz.status];
+  $('btn-save-draft').textContent = quiz.status === 'draft' ? 'Save as draft' : 'Move to drafts';
+  if (isLocked) {
+    $('btn-save-draft').classList.add('hidden');
+    $('locked-warning').classList.remove('hidden');
+    $('locked-attempt-count').textContent = attemptCount;
+    ['btn-add-q', 'btn-add-tf', 'btn-add-q-bottom'].forEach(id => $(id).classList.add('hidden'));
+  }
+
+  const { data: qData } = await supabase.from('questions').select('*').eq('quiz_id', quizId).order('order_index', { ascending: true });
+  questions = (qData || []).map(q => ({
+    type: q.question_type,
+    text: q.question_text,
+    marks: Number(q.marks),
+    correct: q.correct_option,
+    options: (q.options || []).map(o => ({ id: o.id, text: o.text }))
+  }));
+  if (questions.length === 0) questions = [blankQuestion()];
+  return true;
 }
 
-/**
- * Renders all questions into the container
- */
-function renderQuestionsList() {
-  const container = document.getElementById('questions-container');
-  if (!container) return;
+async function suggestClassNumber() {
+  const courseId = $('field-course').value;
+  const { data } = await getSupabase()
+    .from('quizzes')
+    .select('class_number')
+    .eq('course_id', courseId)
+    .order('class_number', { ascending: false })
+    .limit(1);
+  $('field-class-number').value = (data?.[0]?.class_number || 0) + 1;
+}
 
+function updateBackLinks() {
+  const url = `quizzes.html?course=${$('field-course').value}`;
+  $('back-link').href = url;
+  $('btn-cancel').href = url;
+}
+
+// ------------------------------------------------------------------------------
+// Question list
+// ------------------------------------------------------------------------------
+
+function renderQuestions() {
+  const container = $('questions-list-container');
   container.innerHTML = '';
+  const dis = isLocked ? 'disabled' : '';
 
-  questions.forEach((q, qIndex) => {
+  questions.forEach((q, idx) => {
     const card = document.createElement('div');
     card.className = 'question-builder-item';
+    const isTF = q.type === 'true_false';
 
     card.innerHTML = `
       <div class="question-builder-header">
-        <div class="question-drag-title">
-          <span>Question ${qIndex + 1}</span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 0.75rem;">
-          <div style="display: flex; align-items: center; gap: 0.35rem;">
-            <label style="font-size: 0.85rem; color: var(--text-muted);">Points:</label>
-            <input type="number" step="0.5" min="0.5" class="form-control q-marks-input" style="width: 75px; padding: 0.35rem 0.6rem;" value="${q.marks}" ${hasExistingAttempts ? 'disabled' : ''}>
-          </div>
-          ${!hasExistingAttempts && questions.length > 1 ? `
-            <button type="button" class="btn btn-outline btn-sm btn-delete-q" style="color: var(--danger); border-color: var(--danger-border);">Delete</button>
-          ` : ''}
+        <div class="question-drag-title">Question ${idx + 1} <span class="badge badge-draft">${isTF ? 'True / False' : 'Multiple choice'}</span></div>
+        <div class="toolbar" style="gap: 0.4rem;">
+          <label class="small muted" for="marks-${idx}">Marks</label>
+          <input id="marks-${idx}" type="number" step="0.5" min="0.5" max="99" class="form-control q-marks" style="width: 80px; padding: 0.35rem 0.6rem;" value="${q.marks}" ${dis}>
+          ${isLocked ? '' : `
+            <button type="button" class="icon-btn" data-move="-1" title="Move up" aria-label="Move up" ${idx === 0 ? 'disabled' : ''}>&uarr;</button>
+            <button type="button" class="icon-btn" data-move="1" title="Move down" aria-label="Move down" ${idx === questions.length - 1 ? 'disabled' : ''}>&darr;</button>
+            <button type="button" class="icon-btn" data-duplicate title="Duplicate" aria-label="Duplicate">⧉</button>
+            ${questions.length > 1 ? '<button type="button" class="btn btn-danger-outline btn-sm" data-delete>Delete</button>' : ''}
+          `}
         </div>
       </div>
 
       <div class="form-group">
-        <label class="form-label">Question Text</label>
-        <textarea class="form-textarea q-text-input" rows="2" placeholder="e.g. Which of the following is a primary key constraint?" required ${hasExistingAttempts ? 'disabled' : ''}>${q.text}</textarea>
+        <label class="form-label" for="prompt-${idx}">Question *</label>
+        <textarea id="prompt-${idx}" class="form-textarea q-prompt" rows="2" placeholder="Type the question..." ${dis}>${escapeHtml(q.text)}</textarea>
       </div>
 
       <div class="form-group" style="margin-bottom: 0;">
-        <label class="form-label">Options & Correct Answer (Select radio for correct answer)</label>
+        <span class="form-label">Options — select the correct answer</span>
         <div class="options-builder-list">
-          ${q.options.map(opt => `
+          ${q.options.map((opt, oIdx) => `
             <div class="option-builder-row">
               <label class="correct-radio-label">
-                <input type="radio" name="correct_q_${qIndex}" value="${opt.id}" ${q.correctOption === opt.id ? 'checked' : ''} ${hasExistingAttempts ? 'disabled' : ''}>
+                <input type="radio" name="correct_${idx}" value="${opt.id}" ${q.correct === opt.id ? 'checked' : ''} ${dis}>
                 <span>${opt.id}</span>
               </label>
-              <input type="text" class="form-control opt-text-input" data-opt-id="${opt.id}" placeholder="Option ${opt.id} text" value="${escapeHtml(opt.text)}" required ${hasExistingAttempts ? 'disabled' : ''}>
+              <input type="text" class="form-control opt-input" data-opt="${oIdx}" placeholder="Option ${opt.id}" value="${escapeHtml(opt.text)}" ${isTF || isLocked ? 'disabled' : ''}>
+              ${!isTF && !isLocked && q.options.length > 2 ? `<button type="button" class="icon-btn" data-remove-opt="${oIdx}" title="Remove option" aria-label="Remove option ${opt.id}">&times;</button>` : ''}
             </div>
           `).join('')}
         </div>
+        ${!isTF && !isLocked && q.options.length < OPTION_IDS.length ? '<button type="button" class="link-button" data-add-opt>+ Add option</button>' : ''}
       </div>
     `;
 
-    // Event Bindings for this question card
-    const marksInput = card.querySelector('.q-marks-input');
-    marksInput.addEventListener('input', (e) => {
-      q.marks = parseFloat(e.target.value) || 1.0;
-    });
+    card.querySelector('.q-marks').addEventListener('input', (e) => { q.marks = parseFloat(e.target.value) || 0; markDirty(); updateSummary(); });
+    card.querySelector('.q-prompt').addEventListener('input', (e) => { q.text = e.target.value; markDirty(); });
+    card.querySelectorAll(`input[name="correct_${idx}"]`).forEach(r => r.addEventListener('change', (e) => { q.correct = e.target.value; markDirty(); }));
+    card.querySelectorAll('.opt-input').forEach(inp => inp.addEventListener('input', (e) => { q.options[Number(e.target.dataset.opt)].text = e.target.value; markDirty(); }));
 
-    const textInput = card.querySelector('.q-text-input');
-    textInput.addEventListener('input', (e) => {
-      q.text = e.target.value;
+    card.querySelectorAll('[data-move]').forEach(btn => btn.addEventListener('click', () => {
+      const to = idx + Number(btn.dataset.move);
+      [questions[idx], questions[to]] = [questions[to], questions[idx]];
+      markDirty();
+      renderQuestions();
+    }));
+    card.querySelector('[data-duplicate]')?.addEventListener('click', () => {
+      questions.splice(idx + 1, 0, structuredClone(q));
+      markDirty();
+      renderQuestions();
     });
-
-    const radioInputs = card.querySelectorAll(`input[name="correct_q_${qIndex}"]`);
-    radioInputs.forEach(radio => {
-      radio.addEventListener('change', (e) => {
-        if (e.target.checked) q.correctOption = e.target.value;
-      });
+    card.querySelector('[data-delete]')?.addEventListener('click', () => {
+      if ((q.text.trim() || q.options.some(o => o.text.trim())) && !confirm(`Delete question ${idx + 1}?`)) return;
+      questions.splice(idx, 1);
+      markDirty();
+      renderQuestions();
     });
-
-    const optInputs = card.querySelectorAll('.opt-text-input');
-    optInputs.forEach(optInput => {
-      optInput.addEventListener('input', (e) => {
-        const optId = e.target.getAttribute('data-opt-id');
-        const targetOpt = q.options.find(o => o.id === optId);
-        if (targetOpt) targetOpt.text = e.target.value;
-      });
+    card.querySelector('[data-add-opt]')?.addEventListener('click', () => {
+      q.options.push({ id: OPTION_IDS[q.options.length], text: '' });
+      markDirty();
+      renderQuestions();
     });
-
-    const deleteBtn = card.querySelector('.btn-delete-q');
-    if (deleteBtn) {
-      deleteBtn.addEventListener('click', () => {
-        questions.splice(qIndex, 1);
-        renderQuestionsList();
-      });
-    }
+    card.querySelectorAll('[data-remove-opt]').forEach(btn => btn.addEventListener('click', () => {
+      q.options.splice(Number(btn.dataset.removeOpt), 1);
+      q.options.forEach((o, i) => { o.id = OPTION_IDS[i]; });   // keep letters contiguous
+      if (!q.options.some(o => o.id === q.correct)) q.correct = 'A';
+      markDirty();
+      renderQuestions();
+    }));
 
     container.appendChild(card);
   });
+
+  updateSummary();
 }
 
-function setupEventListeners() {
-  document.getElementById('btn-add-question').addEventListener('click', () => {
-    addQuestionObject();
-    renderQuestionsList();
+function updateSummary() {
+  const total = questions.reduce((sum, q) => sum + (Number(q.marks) || 0), 0);
+  $('questions-summary').textContent = `${questions.length} question${questions.length === 1 ? '' : 's'} · ${fmtNum(total)} marks total`;
+}
+
+function addQuestion(type) {
+  questions.push(blankQuestion(type));
+  markDirty();
+  renderQuestions();
+  const prompts = document.querySelectorAll('.q-prompt');
+  prompts[prompts.length - 1]?.focus();
+}
+
+function markDirty() { isDirty = true; }
+
+// ------------------------------------------------------------------------------
+// Events & saving
+// ------------------------------------------------------------------------------
+
+function setupEvents() {
+  $('btn-add-q').addEventListener('click', () => addQuestion('single_choice'));
+  $('btn-add-q-bottom').addEventListener('click', () => addQuestion('single_choice'));
+  $('btn-add-tf').addEventListener('click', () => addQuestion('true_false'));
+  $('btn-save-draft').addEventListener('click', () => save('draft'));
+  $('btn-save-publish').addEventListener('click', () => save(editingQuiz && editingQuiz.status === 'closed' ? 'closed' : 'published'));
+
+  $('field-course').addEventListener('change', async () => {
+    rememberActiveCourse($('field-course').value);
+    updateBackLinks();
+    if (!editingQuiz) await suggestClassNumber();
+    markDirty();
   });
 
-  document.getElementById('btn-save-draft').addEventListener('click', () => saveQuiz('draft'));
-  document.getElementById('btn-publish-quiz').addEventListener('click', () => saveQuiz('published'));
-}
+  document.querySelectorAll('#builder input, #builder textarea, #builder select').forEach(el => el.addEventListener('change', markDirty));
 
-/**
- * Saves or updates the quiz and questions
- */
-async function saveQuiz(status) {
-  const supabase = getSupabase();
-  if (!supabase) return;
-
-  // Validate Quiz Metadata
-  const classNum = parseInt(document.getElementById('quiz-class-number').value, 10);
-  const title = document.getElementById('quiz-title').value.trim();
-  const date = document.getElementById('quiz-date').value;
-  const desc = document.getElementById('quiz-description').value.trim();
-  const timeLimitVal = document.getElementById('quiz-time-limit').value;
-  const timeLimit = timeLimitVal ? parseInt(timeLimitVal, 10) : null;
-  const showScore = document.getElementById('quiz-show-score').checked;
-  const showAnswers = document.getElementById('quiz-show-answers').checked;
-
-  if (!classNum || classNum < 1 || classNum > 35) {
-    showToast('Please enter a valid Class number between 1 and 35.', 'warning');
-    return;
-  }
-
-  if (!title) {
-    showToast('Please enter a quiz title / topic.', 'warning');
-    return;
-  }
-
-  if (!date) {
-    showToast('Please select a scheduled date.', 'warning');
-    return;
-  }
-
-  const now = new Date();
-  const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  if (!hasExistingAttempts && date < localToday) {
-    showToast('Scheduled date cannot be in the past. Please select today or a future date.', 'warning');
-    document.getElementById('quiz-date').focus();
-    return;
-  }
-
-  // Validate Questions if not locked
-  if (!hasExistingAttempts) {
-    if (questions.length === 0) {
-      showToast('Please add at least one question.', 'warning');
-      return;
-    }
-
-    for (let i = 0; i < questions.length; i++) {
-      const q = questions[i];
-      if (!q.text.trim()) {
-        showToast(`Please write the prompt for Question ${i + 1}.`, 'warning');
-        return;
-      }
-      for (const opt of q.options) {
-        if (!opt.text.trim()) {
-          showToast(`Please provide text for Option ${opt.id} in Question ${i + 1}.`, 'warning');
-          return;
-        }
-      }
-    }
-  }
-
-  const saveBtn = status === 'published' ? document.getElementById('btn-publish-quiz') : document.getElementById('btn-save-draft');
-  saveBtn.disabled = true;
-  saveBtn.textContent = 'Saving...';
-
-  try {
-    let quizId = editingQuizId;
-
-    const quizPayload = {
-      class_number: classNum,
-      title: title,
-      description: desc,
-      scheduled_date: date,
-      status: status,
-      time_limit_minutes: timeLimit,
-      show_score_immediately: showScore,
-      show_correct_answers: showAnswers,
-      updated_at: new Date().toISOString()
-    };
-
-    if (quizId) {
-      // Update existing quiz
-      const { error: updErr } = await supabase
-        .from('quizzes')
-        .update(quizPayload)
-        .eq('id', quizId);
-
-      if (updErr) throw updErr;
+  document.querySelectorAll('[data-close-in]').forEach(btn => btn.addEventListener('click', () => {
+    const input = $('field-closes-at');
+    const v = btn.dataset.closeIn;
+    if (v === 'clear') input.value = '';
+    else if (v === 'tonight') {
+      const d = new Date();
+      d.setHours(23, 59, 0, 0);
+      input.value = toLocalInput(d);
     } else {
-      // Insert new quiz
-      quizPayload.created_by = currentTeacher.id;
-      const { data: newQuiz, error: insErr } = await supabase
-        .from('quizzes')
-        .insert(quizPayload)
-        .select()
-        .single();
-
-      if (insErr) throw insErr;
-      quizId = newQuiz.id;
+      input.value = toLocalInput(new Date(Date.now() + Number(v) * 60000));
     }
+    markDirty();
+  }));
 
-    // Save questions only if not locked
-    if (!hasExistingAttempts) {
-      // If updating existing quiz, delete old questions first to replace cleanly
-      if (editingQuizId) {
-        await supabase.from('questions').delete().eq('quiz_id', quizId);
-      }
-
-      const questionsToInsert = questions.map((q, idx) => ({
-        quiz_id: quizId,
-        question_text: q.text.trim(),
-        question_type: 'single_choice',
-        options: q.options.map(o => ({ id: o.id, text: o.text.trim() })),
-        correct_option: q.correctOption,
-        marks: q.marks,
-        order_index: idx + 1
-      }));
-
-      const { error: qInsErr } = await supabase
-        .from('questions')
-        .insert(questionsToInsert);
-
-      if (qInsErr) throw qInsErr;
+  window.addEventListener('beforeunload', (e) => {
+    if (isDirty && !isSaving) {
+      e.preventDefault();
+      e.returnValue = '';
     }
-
-    showToast(`Quiz successfully saved as ${status}!`, 'success');
-    setTimeout(() => {
-      window.location.href = 'admin.html';
-    }, 800);
-
-  } catch (err) {
-    console.error('Error saving quiz:', err);
-    showToast('Failed to save quiz: ' + err.message, 'danger');
-    saveBtn.disabled = false;
-    saveBtn.textContent = status === 'published' ? 'Publish Quiz' : 'Save as Draft';
-  }
+  });
 }
 
-function escapeHtml(str) {
-  return (str || '')
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+function validate(status) {
+  const classNum = parseInt($('field-class-number').value, 10);
+  if (!$('field-course').value) return 'Choose a course.';
+  if (!classNum || classNum < 1 || classNum > 300) return 'Enter a class number between 1 and 300.';
+  if (!$('field-title').value.trim()) return 'Give the quiz a title.';
+  if (!$('field-date').value) return 'Choose the class date.';
+  const limit = $('field-time-limit').value;
+  if (limit && (parseInt(limit, 10) < 1 || parseInt(limit, 10) > 300)) return 'Time limit must be between 1 and 300 minutes.';
+  const closesAt = $('field-closes-at').value;
+  if (closesAt && status === 'published' && new Date(closesAt) < new Date() && (!editingQuiz || editingQuiz.status === 'draft')) {
+    return 'The automatic close time is in the past — students could not take the quiz. Change or clear it.';
+  }
+  if (isLocked) return null;
+
+  if (questions.length === 0) return 'Add at least one question.';
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i];
+    if (!q.text.trim()) return `Question ${i + 1} is empty.`;
+    if (!(Number(q.marks) > 0)) return `Question ${i + 1} needs marks greater than 0.`;
+    if (q.options.length < 2) return `Question ${i + 1} needs at least two options.`;
+    const empty = q.options.find(o => !o.text.trim());
+    if (empty) return `Option ${empty.id} of question ${i + 1} is empty.`;
+    if (!q.options.some(o => o.id === q.correct)) return `Pick the correct answer for question ${i + 1}.`;
+  }
+  return null;
+}
+
+async function save(status) {
+  const problem = validate(status);
+  if (problem) {
+    showToast(problem, 'warning');
+    return;
+  }
+
+  const btn = status === 'draft' ? $('btn-save-draft') : $('btn-save-publish');
+  const label = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  isSaving = true;
+
+  const quizPayload = {
+    id: editingQuiz?.id || null,
+    course_id: $('field-course').value,
+    class_number: parseInt($('field-class-number').value, 10),
+    title: $('field-title').value.trim(),
+    description: $('field-description').value.trim(),
+    scheduled_date: $('field-date').value,
+    status,
+    time_limit_minutes: $('field-time-limit').value ? parseInt($('field-time-limit').value, 10) : null,
+    closes_at: fromLocalInput($('field-closes-at').value),
+    show_score_immediately: $('field-show-score').checked,
+    show_correct_answers: $('field-show-answers').checked
+  };
+
+  const questionPayload = questions.map(q => ({
+    question_text: q.text.trim(),
+    question_type: q.type,
+    marks: Number(q.marks),
+    correct_option: q.correct,
+    options: q.options.map(o => ({ id: o.id, text: o.text.trim() }))
+  }));
+
+  const { error } = await getSupabase().rpc('save_quiz', { p_quiz: quizPayload, p_questions: questionPayload });
+
+  if (error) {
+    isSaving = false;
+    btn.disabled = false;
+    btn.innerHTML = label;
+    const msg = error.code === '23505'
+      ? `Class ${quizPayload.class_number} already has a quiz in this course. Use a different class number.`
+      : friendlyError(error);
+    showToast(msg, 'danger');
+    return;
+  }
+
+  isDirty = false;
+  const verb = status === 'draft' ? 'saved as a draft' : (editingQuiz && editingQuiz.status !== 'draft' ? 'saved' : 'published — students can take it now');
+  showToast(`Quiz ${verb}.`, 'success');
+  setTimeout(() => { window.location.href = `quizzes.html?course=${quizPayload.course_id}`; }, 700);
 }
 
 document.addEventListener('DOMContentLoaded', initBuilder);

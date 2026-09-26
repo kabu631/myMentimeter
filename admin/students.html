@@ -3,18 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Student Roster &amp; Management | Faculty Console</title>
-  <meta name="description" content="View enrolled student list, roll numbers, sections, registration dates, and participation counts.">
+  <title>Students | Teacher Console</title>
+  <meta name="description" content="Course roster, join code and each student's semester progress.">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 
   <link rel="stylesheet" href="../css/main.css">
   <link rel="stylesheet" href="../css/components.css">
   <link rel="stylesheet" href="../css/admin.css">
 
-  <!-- Supabase Official JS SDK from CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <!-- Header / Navigation -->
   <header class="app-navbar">
     <div class="app-container navbar-inner">
       <a href="index.html" class="navbar-brand">
@@ -24,160 +23,76 @@
             <path d="M6 12v5c3 3 9 3 12 0v-5"/>
           </svg>
         </div>
-        <span>InstructorConsole</span>
+        <span>DailyClassQuiz</span>
       </a>
-      <nav class="navbar-nav">
-        <!-- Dynamically injected -->
-      </nav>
+      <nav class="navbar-nav"></nav>
     </div>
   </header>
 
   <main class="main-content">
     <div class="app-container">
+      <div id="course-switcher"></div>
 
-      <!-- Academic Course Context Bar -->
-      <div style="margin-bottom: 1.25rem;">
-        <div class="academic-subline">
-          Department of Computer Science &bull; CS-301: Database Management Systems
-        </div>
-      </div>
-
-      <!-- Header Row -->
-      <section class="admin-header-row">
-        <div>
-          <div style="font-size: 0.85rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;">
-            Classroom Enrollment Roster &bull; Spring 2026
+      <div id="page-body" class="hidden">
+        <section class="page-header">
+          <div>
+            <div class="page-eyebrow">Students</div>
+            <h1 id="course-title" class="page-title">Students</h1>
+            <p class="page-lead">Everyone enrolled in this course and how they're doing this semester.</p>
           </div>
-          <h1 style="font-size: 2.2rem; margin-bottom: 0.25rem;">Enrolled Students</h1>
-          <p style="margin: 0; color: var(--text-muted);">
-            View student identity, roll numbers, sections, and registration timestamps.
+          <button id="btn-export-roster" class="btn btn-secondary">Export roster (CSV)</button>
+        </section>
+
+        <section class="card section-block" style="display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: center; justify-content: space-between;">
+          <div>
+            <div class="page-eyebrow">Join code</div>
+            <div class="toolbar">
+              <span id="join-code" class="join-code join-code-lg"></span>
+              <button id="btn-copy-code" class="btn btn-outline btn-sm">Copy code</button>
+              <button id="btn-copy-invite" class="btn btn-primary btn-sm">Copy invite message</button>
+            </div>
+          </div>
+          <p class="small muted" style="max-width: 420px; margin: 0;">
+            Students create an account on this site, then type this code into <strong>Join Course</strong> on their dashboard.
+            You can change the code from <a href="index.html">Courses</a> → edit.
           </p>
+        </section>
+
+        <div class="section-head">
+          <input type="search" id="student-search-input" class="form-control" placeholder="Search name, roll no, section, email..." style="max-width: 360px;">
+          <span id="student-count-pill" class="badge badge-published" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">0 students</span>
         </div>
 
-        <div>
-          <span id="student-count-pill" class="badge badge-published" style="font-size: 0.95rem; padding: 0.5rem 1rem;">
-            0 Students Enrolled
-          </span>
-        </div>
-      </section>
-
-      <!-- Search & Filter Controls -->
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
-        <div style="width: 100%; max-width: 360px;">
-          <input type="text" id="student-search-input" class="form-control" placeholder="Search by name, roll number, section, email...">
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Roll No.</th>
+                <th>Name</th>
+                <th>Section</th>
+                <th>Email</th>
+                <th>Joined</th>
+                <th>Quizzes</th>
+                <th>Score</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="students-table-body">
+              <tr><td colspan="8" class="muted" style="text-align: center; padding: 2rem;">Loading roster...</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
-
-      <!-- Students Data Table -->
-      <div class="table-container">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Student ID / Roll No.</th>
-              <th>Full Name</th>
-              <th>Section</th>
-              <th>College Email</th>
-              <th>Registration Date</th>
-              <th>Quizzes Taken</th>
-            </tr>
-          </thead>
-          <tbody id="students-table-body">
-            <tr>
-              <td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-muted);">
-                Loading student roster...
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
     </div>
   </main>
 
   <footer class="app-footer">
     <div class="app-container footer-inner">
-      <div>Daily Quiz System &copy; 2026. Faculty Administration Console.</div>
-      <div>Academic Evaluation Portal</div>
+      <div>DailyClassQuiz &copy; 2026 &bull; Teacher Console</div>
+      <div>Graded securely in the database</div>
     </div>
   </footer>
 
-  <script type="module">
-    import { guardAdminPage, getRegisteredStudents } from '../js/admin-service.js';
-
-    let allStudents = [];
-
-    async function initStudentsPage() {
-      const admin = await guardAdminPage();
-      if (!admin) return;
-
-      allStudents = await getRegisteredStudents();
-      renderStudents(allStudents);
-
-      document.getElementById('student-count-pill').textContent = `${allStudents.length} Students Enrolled`;
-
-      document.getElementById('student-search-input').addEventListener('input', (e) => {
-        const term = e.target.value.toLowerCase();
-        const filtered = allStudents.filter(s => 
-          (s.full_name || '').toLowerCase().includes(term) ||
-          (s.student_id || '').toLowerCase().includes(term) ||
-          (s.section || '').toLowerCase().includes(term) ||
-          (s.email || '').toLowerCase().includes(term)
-        );
-        renderStudents(filtered);
-      });
-    }
-
-    function renderStudents(list) {
-      const tbody = document.getElementById('students-table-body');
-      if (!tbody) return;
-
-      if (list.length === 0) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="6" class="empty-state" style="padding: 2.5rem 1rem;">
-              <div class="empty-icon">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-                </svg>
-              </div>
-              <div class="empty-title">No Students Found</div>
-              <p class="empty-text">No registered student accounts match your filter.</p>
-            </td>
-          </tr>
-        `;
-        return;
-      }
-
-      tbody.innerHTML = list.map(s => {
-        const regDate = s.created_at ? new Date(s.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A';
-        const attemptsCount = s.quiz_attempts?.[0]?.count || 0;
-
-        return `
-          <tr>
-            <td>
-              <strong style="color: var(--primary); font-family: var(--font-heading);">${s.student_id || 'N/A'}</strong>
-            </td>
-            <td>
-              <strong style="color: var(--text-primary);">${s.full_name || 'Unnamed'}</strong>
-            </td>
-            <td>
-              <span class="badge badge-primary">${s.section || 'General'}</span>
-            </td>
-            <td>
-              <span style="color: var(--text-muted);">${s.email}</span>
-            </td>
-            <td>
-              <span style="color: var(--text-secondary); font-size: 0.85rem;">${regDate}</span>
-            </td>
-            <td>
-              <strong>${attemptsCount}</strong> attempts
-            </td>
-          </tr>
-        `;
-      }).join('');
-    }
-
-    document.addEventListener('DOMContentLoaded', initStudentsPage);
-  </script>
+  <script type="module" src="../js/admin-students.js"></script>
 </body>
 </html>

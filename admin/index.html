@@ -3,18 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Overview | Daily College Quiz System</title>
-  <meta name="description" content="Faculty & Admin dashboard overview. View total students, published quizzes, drafts, and attempt metrics.">
+  <title>My Courses | Teacher Console</title>
+  <meta name="description" content="Manage your courses, join codes and open quizzes.">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 
   <link rel="stylesheet" href="../css/main.css">
   <link rel="stylesheet" href="../css/components.css">
   <link rel="stylesheet" href="../css/admin.css">
 
-  <!-- Supabase Official JS SDK from CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <!-- Header / Navigation -->
   <header class="app-navbar">
     <div class="app-container navbar-inner">
       <a href="index.html" class="navbar-brand">
@@ -24,306 +23,135 @@
             <path d="M6 12v5c3 3 9 3 12 0v-5"/>
           </svg>
         </div>
-        <span>InstructorConsole</span>
+        <span>DailyClassQuiz</span>
       </a>
-      <nav class="navbar-nav">
-        <!-- Dynamically populated by guardAdminPage() -->
-      </nav>
+      <nav class="navbar-nav"></nav>
     </div>
   </header>
 
   <main class="main-content">
     <div class="app-container">
 
-      <!-- Academic Course Context Bar -->
-      <div style="margin-bottom: 1.25rem;">
-        <div class="academic-subline">
-          Department of Computer Science &bull; CS-301: Database Management Systems
-        </div>
-      </div>
-
-      <!-- Header Row with Quick Actions -->
-      <section class="admin-header-row">
+      <section class="page-header">
         <div>
-          <div style="font-size: 0.85rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;">
-            Semester Daily Quiz Management &bull; Spring 2026
-          </div>
-          <h1 style="font-size: 2.2rem; margin-bottom: 0.25rem;">Dashboard Overview</h1>
-          <p style="margin: 0; color: var(--text-muted);">
-            Manage ~35 daily class quizzes, review student participation, and export official gradebooks.
-          </p>
+          <div class="page-eyebrow">Teacher Console</div>
+          <h1 class="page-title">Welcome, <span id="teacher-name">Teacher</span></h1>
+          <p class="page-lead">Your courses, their join codes, and quizzes that are open right now.</p>
         </div>
+        <button id="btn-new-course" class="btn btn-primary">+ New Course</button>
+      </section>
 
-        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-          <a href="create-quiz.html" class="btn btn-primary">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Create New Quiz
-          </a>
-          <a href="results.html" class="btn btn-secondary">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
-            </svg>
-            Semester Gradebook
-          </a>
-          <a href="students.html" class="btn btn-outline">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
-            Student Roster
-          </a>
+      <section class="stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));">
+        <div class="stat-card"><div class="stat-content"><div id="metric-courses" class="stat-value">–</div><div class="stat-label">Active Courses</div></div></div>
+        <div class="stat-card"><div class="stat-content"><div id="metric-students" class="stat-value">–</div><div class="stat-label">Enrolled Students</div></div></div>
+        <div class="stat-card"><div class="stat-content"><div id="metric-quizzes" class="stat-value">–</div><div class="stat-label">Quizzes Held</div></div></div>
+        <div class="stat-card"><div class="stat-content"><div id="metric-open" class="stat-value text-success">–</div><div class="stat-label">Open Right Now</div></div></div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-head">
+          <h2 class="section-title">Open Quizzes</h2>
+          <span class="small muted">Close a quiz to stop submissions and unlock answer review</span>
+        </div>
+        <div id="open-quizzes"></div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-head">
+          <h2 class="section-title">My Courses</h2>
+          <label class="form-check small"><input type="checkbox" id="show-archived"> Show archived</label>
+        </div>
+        <div id="courses-grid" class="grid-cards">
+          <div class="card muted">Loading courses...</div>
         </div>
       </section>
 
-      <!-- 1. OVERVIEW METRICS GRID -->
-      <section class="stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 2rem;">
-        
-        <!-- Total Students -->
-        <div class="stat-card">
-          <div class="stat-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
-          </div>
-          <div class="stat-content">
-            <div id="metric-total-students" class="stat-value">0</div>
-            <div class="stat-label">Total Students</div>
-          </div>
-        </div>
-
-        <!-- Total Quizzes -->
-        <div class="stat-card">
-          <div class="stat-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-            </svg>
-          </div>
-          <div class="stat-content">
-            <div id="metric-total-quizzes" class="stat-value">0</div>
-            <div class="stat-label">Total Quizzes</div>
-          </div>
-        </div>
-
-        <!-- Published Quizzes -->
-        <div class="stat-card">
-          <div class="stat-icon" style="color: var(--success); background: #ecfdf5; border-color: #a7f3d0;">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
-          </div>
-          <div class="stat-content">
-            <div id="metric-published-quizzes" class="stat-value" style="color: var(--success);">0</div>
-            <div class="stat-label">Published (Active)</div>
-          </div>
-        </div>
-
-        <!-- Draft Quizzes -->
-        <div class="stat-card">
-          <div class="stat-icon" style="color: var(--warning); background: #fffbeb; border-color: #fde68a;">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-            </svg>
-          </div>
-          <div class="stat-content">
-            <div id="metric-draft-quizzes" class="stat-value" style="color: var(--warning);">0</div>
-            <div class="stat-label">Draft Quizzes</div>
-          </div>
-        </div>
-
-        <!-- Total Attempts -->
-        <div class="stat-card">
-          <div class="stat-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-            </svg>
-          </div>
-          <div class="stat-content">
-            <div id="metric-total-attempts" class="stat-value" style="color: var(--primary);">0</div>
-            <div class="stat-label">Total Submissions</div>
-          </div>
-        </div>
-
-      </section>
-
-      <!-- 2. PRIORITIZED TABLE: ACTIVE & RECENT QUIZZES -->
-      <section style="margin-bottom: 2.5rem;">
-        <div class="card-header" style="border: none; padding: 0; margin-bottom: 1rem;">
-          <div>
-            <h2 class="card-title">Active &amp; Recent Class Quizzes</h2>
-            <span style="font-size: 0.85rem; color: var(--text-muted);">Quick actions and attempt status</span>
-          </div>
-          <div style="display: flex; gap: 0.75rem; align-items: center;">
-            <a href="create-quiz.html" class="btn btn-primary btn-sm">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-              New Quiz
-            </a>
-            <a href="quizzes.html" class="btn btn-outline btn-sm">View All 35 Quizzes &rarr;</a>
-          </div>
-        </div>
-
-        <div class="table-container">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Class</th>
-                <th>Quiz Topic &amp; Title</th>
-                <th>Scheduled Date</th>
-                <th>Questions</th>
-                <th>Submissions</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="admin-overview-quizzes-body">
-              <tr>
-                <td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-muted);">
-                  Loading recent quizzes...
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- 3. CONSOLE MODULES CARDS -->
-      <section style="margin-bottom: 2rem;">
-        <div class="card-header" style="border: none; padding: 0; margin-bottom: 1rem;">
-          <h2 class="card-title">Console Management Modules</h2>
-        </div>
-
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.25rem;">
-          
-          <a href="quizzes.html" class="card hover-lift" style="display: block;">
-            <div class="stat-icon" style="margin-bottom: 1rem; width: 42px; height: 42px;">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-              </svg>
-            </div>
-            <h3 style="font-size: 1.25rem; margin-bottom: 0.35rem;">Manage Quizzes</h3>
-            <p style="font-size: 0.9rem; color: var(--text-muted); margin: 0;">
-              Publish, edit, close, or review questions for each of the 35 semester class quizzes.
-            </p>
-          </a>
-
-          <a href="create-quiz.html" class="card hover-lift" style="display: block;">
-            <div class="stat-icon" style="margin-bottom: 1rem; width: 42px; height: 42px;">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-            </div>
-            <h3 style="font-size: 1.25rem; margin-bottom: 0.35rem;">Create New Quiz</h3>
-            <p style="font-size: 0.9rem; color: var(--text-muted); margin: 0;">
-              Build multiple choice questions, designate correct answers, set points, and configure schedules.
-            </p>
-          </a>
-
-          <a href="students.html" class="card hover-lift" style="display: block;">
-            <div class="stat-icon" style="margin-bottom: 1rem; width: 42px; height: 42px;">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-              </svg>
-            </div>
-            <h3 style="font-size: 1.25rem; margin-bottom: 0.35rem;">Enrolled Students</h3>
-            <p style="font-size: 0.9rem; color: var(--text-muted); margin: 0;">
-              View student roster, roll numbers, class sections, and registration dates.
-            </p>
-          </a>
-
-          <a href="results.html" class="card hover-lift" style="display: block;">
-            <div class="stat-icon" style="margin-bottom: 1rem; width: 42px; height: 42px;">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </div>
-            <h3 style="font-size: 1.25rem; margin-bottom: 0.35rem;">Results &amp; CSV Export</h3>
-            <p style="font-size: 0.9rem; color: var(--text-muted); margin: 0;">
-              Inspect individual submission scores and export full semester gradebook spreadsheets.
-            </p>
-          </a>
-
-        </div>
+      <section id="how-it-works" class="card section-block hidden">
+        <h2 class="section-title" style="margin-bottom: 0.75rem;">How it works</h2>
+        <ol style="padding-left: 1.25rem; color: var(--text-secondary); display: grid; gap: 0.4rem;">
+          <li><strong>Create a course</strong> for each subject / section you teach. Each gets its own join code.</li>
+          <li><strong>Share the join code</strong>. Students register, then enter the code on their dashboard.</li>
+          <li><strong>After each class, publish a quiz</strong>. Students answer and see their score immediately.</li>
+          <li><strong>Close the quiz</strong> when time is up (or set an automatic close time). Students who missed it score zero.</li>
+          <li><strong>End of semester:</strong> the Gradebook totals every student's marks, scaled to your weight, ready to export as CSV.</li>
+        </ol>
       </section>
 
     </div>
   </main>
 
+  <!-- Create / edit course -->
+  <div id="course-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="course-modal-title">
+    <div class="modal-dialog" style="max-width: 600px;">
+      <form id="course-form">
+        <div class="modal-header">
+          <h3 id="course-modal-title" class="modal-title">New Course</h3>
+          <button type="button" class="modal-close" data-close aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="course-code">Course code *</label>
+              <input id="course-code" class="form-control" placeholder="e.g. CS-301" required maxlength="30">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="course-section">Section</label>
+              <input id="course-section" class="form-control" placeholder="e.g. A" maxlength="30">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="course-name">Course / subject name *</label>
+            <input id="course-name" class="form-control" placeholder="e.g. Database Management Systems" required maxlength="120">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="course-term">Semester / term</label>
+              <input id="course-term" class="form-control" placeholder="e.g. Spring 2026" maxlength="40">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="course-classes">Planned classes</label>
+              <input id="course-classes" type="number" class="form-control" min="1" max="300" value="35">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="course-weight">Quiz marks in final grade <span class="muted">(optional)</span></label>
+            <input id="course-weight" type="number" class="form-control" min="0.5" step="0.5" placeholder="e.g. 10">
+            <span class="input-hint">If quizzes are worth, say, 10 marks of the final grade, enter 10. Each student's semester percentage is scaled to it (85% → 8.5 / 10).</span>
+          </div>
+
+          <div id="course-edit-extras" class="hidden">
+            <div class="form-group">
+              <span class="form-label">Join code</span>
+              <div class="toolbar">
+                <span id="course-join-code" class="join-code"></span>
+                <button type="button" id="btn-regenerate-code" class="btn btn-outline btn-sm">Generate new code</button>
+              </div>
+              <span class="input-hint">A new code stops the old one from working. Students already enrolled stay enrolled.</span>
+            </div>
+            <label class="form-check">
+              <input type="checkbox" id="course-archived">
+              <span><strong>Archive this course</strong> — hides it from active lists and stops new students joining. Marks are kept.</span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer" style="justify-content: space-between;">
+          <button type="button" id="btn-delete-course" class="btn btn-danger-outline hidden">Delete course</button>
+          <div class="toolbar" style="margin-left: auto;">
+            <button type="button" class="btn btn-outline" data-close>Cancel</button>
+            <button type="submit" id="btn-save-course" class="btn btn-primary">Save course</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <footer class="app-footer">
     <div class="app-container footer-inner">
-      <div>Daily Quiz System &copy; 2026. Faculty Administration Console.</div>
-      <div>Academic Evaluation Portal</div>
+      <div>DailyClassQuiz &copy; 2026 &bull; Teacher Console</div>
+      <div>Graded securely in the database</div>
     </div>
   </footer>
 
-  <script type="module">
-    import { guardAdminPage, getAdminOverviewMetrics, getAllQuizzesWithCounts } from '../js/admin-service.js';
-
-    async function initOverview() {
-      const admin = await guardAdminPage();
-      if (!admin) return;
-
-      const metrics = await getAdminOverviewMetrics();
-      if (metrics) {
-        document.getElementById('metric-total-students').textContent = metrics.totalStudents;
-        document.getElementById('metric-total-quizzes').textContent = metrics.totalQuizzes;
-        document.getElementById('metric-published-quizzes').textContent = metrics.publishedQuizzes;
-        document.getElementById('metric-draft-quizzes').textContent = metrics.draftQuizzes;
-        document.getElementById('metric-total-attempts').textContent = metrics.totalAttempts;
-      }
-
-      const quizzes = await getAllQuizzesWithCounts();
-      const tbody = document.getElementById('admin-overview-quizzes-body');
-      
-      if (!quizzes || quizzes.length === 0) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="7" class="empty-state" style="padding: 2rem;">
-              <div class="empty-icon">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-                </svg>
-              </div>
-              <div class="empty-title">No Quizzes Created Yet</div>
-              <p class="empty-text">Click "Create New Quiz" to write your first daily lecture quiz.</p>
-            </td>
-          </tr>
-        `;
-        return;
-      }
-
-      tbody.innerHTML = quizzes.slice(0, 8).map(q => {
-        const qCount = q.questions?.[0]?.count || 0;
-        const aCount = q.quiz_attempts?.[0]?.count || 0;
-
-        let badge = '<span class="badge badge-draft">Draft</span>';
-        if (q.status === 'published') badge = '<span class="badge badge-published">Active</span>';
-        else if (q.status === 'closed') badge = '<span class="badge badge-closed">Closed</span>';
-
-        return `
-          <tr>
-            <td><span class="badge badge-primary">Class ${String(q.class_number).padStart(2, '0')}</span></td>
-            <td>
-              <strong>${q.title}</strong>
-              ${q.topic ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${q.topic}</div>` : ''}
-            </td>
-            <td><span style="font-size: 0.85rem; color: var(--text-muted);">${q.scheduled_date}</span></td>
-            <td>${qCount} Qs</td>
-            <td><strong>${aCount}</strong> attempts</td>
-            <td>${badge}</td>
-            <td style="white-space: nowrap;">
-              <div style="display: flex; gap: 0.35rem;">
-                <a href="create-quiz.html?id=${q.id}" class="btn btn-secondary btn-sm">Edit</a>
-                <a href="quizzes.html" class="btn btn-outline btn-sm">Manage</a>
-              </div>
-            </td>
-          </tr>
-        `;
-      }).join('');
-    }
-
-    document.addEventListener('DOMContentLoaded', initOverview);
-  </script>
+  <script type="module" src="../js/admin-home.js"></script>
 </body>
 </html>

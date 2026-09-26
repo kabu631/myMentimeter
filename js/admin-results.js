@@ -1,1074 +1,398 @@
 /**
  * ==============================================================================
- * js/admin-results.js - Faculty Semester Results & Gradebook Engine
+ * js/admin-results.js - Semester Gradebook for one course
  * ==============================================================================
- * Features:
- * 1. Complete Class Result View:
- *    - Matrix table: Student ID | Student Name | Section | Q01 | ... | Q35 | Total Earned | Total Possible | Percentage
- *    - Pinned/Sticky Student ID & Name columns for easy horizontal scrolling
- *    - Class average footer row
- * 2. Filters:
- *    - Section
- *    - Student (name / roll number search)
- *    - Quiz (highlight or single-quiz focus)
- *    - Date (date picker filter)
- * 3. Individual Student Result View:
- *    - High-density student performance report
- *    - Complete quiz history breakdown
- *    - Question-by-question answer inspector modal
- * 4. Dual CSV Export:
- *    - Complete 35-class semester matrix CSV (RFC 4180)
- *    - Filtered results CSV
- *    - Individual student report CSV
- * 5. Strict Security:
- *    - Guarded by teacher/admin role authentication.
+ * 1. Class matrix: one row per student, one column per quiz, totals, % and
+ *    weighted final marks, with per-quiz class averages in the footer
+ * 2. Individual view: a student's full record, answer inspection, allow retake
+ * 3. CSV exports: whole gradebook (current filter) and a single student report
+ * URL: results.html?course=<id>[&student=<id>]
  */
 
 import { getSupabase, showToast } from './supabase.js';
-import { guardAdminPage } from './admin-service.js';
-import { APP_CONFIG } from './config.js';
+import {
+  guardAdminPage, loadTeacherCourses, pickActiveCourseId, renderCourseSwitcher, noCoursesHtml, loadCourseGradebook
+} from './admin-service.js';
+import { fetchAttemptReview, renderReviewHtml, reviewTitle } from './review.js';
+import {
+  escapeHtml, fmtNum, fmtPct, fmtDate, fmtDateTime, classLabel, courseLabel, percentOf, pctBadgeClass,
+  scorePillClass, isQuizClosed, downloadCsv, safeFilename, emptyState, friendlyError
+} from './utils.js';
 
-// State variables
-let allStudents = [];
-let allQuizzes = [];
-let allAttempts = [];
-let quizByClass = new Map();
-let attemptByStudentQuiz = new Map();
-let availableSections = [];
+let courses = [];
+let activeCourse = null;
+let book = null;          // { students, quizzes, attempts, attemptsByStudent, summaries }
+let heldQuizzes = [];     // non-draft quizzes, by class number
+let selectedStudentId = null;
+const filters = { term: '', section: 'all' };
 
-// Filter state
-let filterState = {
-  section: 'all',
-  studentQuery: '',
-  quizFilter: 'all',
-  dateFilter: '',
-  activeView: 'matrix' // 'matrix' or 'individual'
-};
-
-let currentSelectedStudentId = null;
-
-/**
- * Initialize Semester Results Dashboard
- */
-export async function initAdminResultsDashboard() {
-  const admin = await guardAdminPage();
-  if (!admin) return;
-
-  await loadAllResultsData();
-  setupEventListeners();
-  renderDashboard();
-}
-
-/**
- * Load students, quizzes, and all attempts from Supabase
- */
-async function loadAllResultsData() {
-  const supabase = getSupabase();
-  if (!supabase) return;
+async function initGradebook() {
+  const teacher = await guardAdminPage();
+  if (!teacher) return;
 
   try {
-    const [studentsRes, quizzesRes, attemptsRes] = await Promise.all([
-      // 1. Fetch all registered students
-      supabase
-        .from('profiles')
-        .select('*')
-        .eq('role', 'student')
-        .order('student_id', { ascending: true }),
-
-      // 2. Fetch all quizzes
-      supabase
-        .from('quizzes')
-        .select('*')
-        .order('class_number', { ascending: true }),
-
-      // 3. Fetch all attempts
-      supabase
-        .from('quiz_attempts')
-        .select(`
-          id,
-          student_id,
-          quiz_id,
-          score,
-          total_marks,
-          submitted_at,
-          status
-        `)
-    ]);
-
-    if (studentsRes.error) throw studentsRes.error;
-    if (quizzesRes.error) throw quizzesRes.error;
-    if (attemptsRes.error) throw attemptsRes.error;
-
-    allStudents = studentsRes.data || [];
-    allQuizzes = quizzesRes.data || [];
-    allAttempts = attemptsRes.data || [];
-
-    // Build Maps
-    quizByClass.clear();
-    allQuizzes.forEach(q => quizByClass.set(Number(q.class_number), q));
-
-    attemptByStudentQuiz.clear();
-    allAttempts.forEach(a => {
-      attemptByStudentQuiz.set(`${a.student_id}_${a.quiz_id}`, a);
-    });
-
-    // Extract unique sections
-    const sectionSet = new Set();
-    allStudents.forEach(s => {
-      const sec = s.section || 'A';
-      if (sec) sectionSet.add(sec.trim());
-    });
-    availableSections = Array.from(sectionSet).sort();
-
-    populateFilterDropdowns();
-
+    courses = await loadTeacherCourses();
   } catch (err) {
-    console.error('Error loading admin results data:', err);
-    showToast('Failed to load results: ' + err.message, 'danger');
-  }
-}
-
-/**
- * Populate Section, Quiz, and Student filter dropdowns
- */
-function populateFilterDropdowns() {
-  // 1. Section Filter
-  const sectionSelect = document.getElementById('filter-section');
-  if (sectionSelect) {
-    sectionSelect.innerHTML = '<option value="all">All Sections</option>';
-    availableSections.forEach(sec => {
-      const opt = document.createElement('option');
-      opt.value = sec;
-      opt.textContent = `Section ${sec}`;
-      sectionSelect.appendChild(opt);
-    });
-  }
-
-  // 2. Quiz Filter
-  const quizSelect = document.getElementById('filter-quiz');
-  if (quizSelect) {
-    quizSelect.innerHTML = '<option value="all">All Quizzes (Q01 – Q35 Matrix)</option>';
-    allQuizzes.forEach(q => {
-      const opt = document.createElement('option');
-      opt.value = q.id;
-      opt.textContent = `Class ${String(q.class_number).padStart(2, '0')}: ${q.title}`;
-      quizSelect.appendChild(opt);
-    });
-  }
-
-  // 3. Individual Student Select
-  const studentSelect = document.getElementById('individual-student-select');
-  if (studentSelect) {
-    studentSelect.innerHTML = '<option value="">Select a student to view details...</option>';
-    allStudents.forEach(s => {
-      const opt = document.createElement('option');
-      opt.value = s.id;
-      opt.textContent = `${s.student_id || 'ID'} — ${s.full_name || 'Student'} (Sec: ${s.section || 'A'})`;
-      studentSelect.appendChild(opt);
-    });
-  }
-}
-
-/**
- * Sets up event listeners for filters, search, tabs, and exports
- */
-function setupEventListeners() {
-  // Section filter
-  document.getElementById('filter-section')?.addEventListener('change', (e) => {
-    filterState.section = e.target.value;
-    renderDashboard();
-  });
-
-  // Student search
-  document.getElementById('filter-student')?.addEventListener('input', (e) => {
-    filterState.studentQuery = e.target.value.toLowerCase().trim();
-    renderDashboard();
-  });
-
-  // Quiz filter
-  document.getElementById('filter-quiz')?.addEventListener('change', (e) => {
-    filterState.quizFilter = e.target.value;
-    renderDashboard();
-  });
-
-  // Date filter
-  document.getElementById('filter-date')?.addEventListener('change', (e) => {
-    filterState.dateFilter = e.target.value;
-    renderDashboard();
-  });
-
-  // Clear date filter
-  document.getElementById('btn-clear-date')?.addEventListener('click', () => {
-    const input = document.getElementById('filter-date');
-    if (input) input.value = '';
-    filterState.dateFilter = '';
-    renderDashboard();
-  });
-
-  // Reset all filters
-  document.getElementById('btn-reset-filters')?.addEventListener('click', () => {
-    filterState.section = 'all';
-    filterState.studentQuery = '';
-    filterState.quizFilter = 'all';
-    filterState.dateFilter = '';
-
-    if (document.getElementById('filter-section')) document.getElementById('filter-section').value = 'all';
-    if (document.getElementById('filter-student')) document.getElementById('filter-student').value = '';
-    if (document.getElementById('filter-quiz')) document.getElementById('filter-quiz').value = 'all';
-    if (document.getElementById('filter-date')) document.getElementById('filter-date').value = '';
-
-    renderDashboard();
-  });
-
-  // View switchers
-  document.getElementById('tab-btn-matrix')?.addEventListener('click', () => {
-    switchView('matrix');
-  });
-
-  document.getElementById('tab-btn-individual')?.addEventListener('click', () => {
-    if (!currentSelectedStudentId && allStudents.length > 0) {
-      currentSelectedStudentId = allStudents[0].id;
-      const select = document.getElementById('individual-student-select');
-      if (select) select.value = currentSelectedStudentId;
-    }
-    switchView('individual');
-  });
-
-  // Individual student select dropdown
-  document.getElementById('individual-student-select')?.addEventListener('change', (e) => {
-    currentSelectedStudentId = e.target.value;
-    renderIndividualStudentView();
-  });
-
-  // Return to matrix view from individual panel
-  document.getElementById('btn-back-to-matrix')?.addEventListener('click', () => {
-    switchView('matrix');
-  });
-
-  // Scroll helper buttons
-  document.getElementById('btn-scroll-start')?.addEventListener('click', () => {
-    const container = document.getElementById('matrix-scroll-wrapper');
-    if (container) container.scrollTo({ left: 0, behavior: 'smooth' });
-  });
-
-  document.getElementById('btn-scroll-mid')?.addEventListener('click', () => {
-    const container = document.getElementById('matrix-scroll-wrapper');
-    if (container) container.scrollTo({ left: 900, behavior: 'smooth' });
-  });
-
-  document.getElementById('btn-scroll-end')?.addEventListener('click', () => {
-    const container = document.getElementById('matrix-scroll-wrapper');
-    if (container) container.scrollTo({ left: container.scrollWidth, behavior: 'smooth' });
-  });
-
-  // CSV Export buttons
-  document.getElementById('btn-export-semester')?.addEventListener('click', exportSemesterMatrixCSV);
-  document.getElementById('btn-export-filtered')?.addEventListener('click', exportFilteredMatrixCSV);
-  document.getElementById('btn-export-student')?.addEventListener('click', exportCurrentStudentCSV);
-
-  // Modal close handlers
-  document.getElementById('btn-close-answer-modal')?.addEventListener('click', closeAnswerModal);
-  document.getElementById('btn-modal-answer-done')?.addEventListener('click', closeAnswerModal);
-  document.getElementById('quiz-answer-inspector-modal')?.addEventListener('click', (e) => {
-    if (e.target.id === 'quiz-answer-inspector-modal') closeAnswerModal();
-  });
-}
-
-function switchView(viewName) {
-  filterState.activeView = viewName;
-  const matrixTab = document.getElementById('tab-btn-matrix');
-  const individualTab = document.getElementById('tab-btn-individual');
-  const matrixPane = document.getElementById('view-matrix-pane');
-  const individualPane = document.getElementById('view-individual-pane');
-
-  if (viewName === 'matrix') {
-    matrixTab?.classList.add('active');
-    individualTab?.classList.remove('active');
-    matrixPane.style.display = 'block';
-    individualPane.style.display = 'none';
-  } else {
-    individualTab?.classList.add('active');
-    matrixTab?.classList.remove('active');
-    matrixPane.style.display = 'none';
-    individualPane.style.display = 'block';
-    renderIndividualStudentView();
-  }
-}
-
-/**
- * Filter students based on filterState
- */
-function getFilteredStudents() {
-  return allStudents.filter(student => {
-    // 1. Section Filter
-    if (filterState.section !== 'all') {
-      const studentSec = (student.section || 'A').trim();
-      if (studentSec.toLowerCase() !== filterState.section.toLowerCase()) return false;
-    }
-
-    // 2. Student Search Filter
-    if (filterState.studentQuery) {
-      const name = (student.full_name || '').toLowerCase();
-      const sId = (student.student_id || '').toLowerCase();
-      const email = (student.email || '').toLowerCase();
-      const q = filterState.studentQuery;
-      if (!name.includes(q) && !sId.includes(q) && !email.includes(q)) return false;
-    }
-
-    // 3. Date Filter (matches if student attempted any quiz on this date or quiz scheduled date)
-    if (filterState.dateFilter) {
-      let hasDateMatch = false;
-      for (const [classNum, quiz] of quizByClass.entries()) {
-        if (quiz.scheduled_date === filterState.dateFilter) {
-          hasDateMatch = true;
-          break;
-        }
-      }
-      if (!hasDateMatch) return false;
-    }
-
-    return true;
-  });
-}
-
-/**
- * Renders the entire dashboard: KPI metrics & active view
- */
-function renderDashboard() {
-  renderKPICards();
-
-  if (filterState.activeView === 'matrix') {
-    renderSemesterMatrixTable();
-  } else {
-    renderIndividualStudentView();
-  }
-}
-
-/**
- * Renders top KPI cards
- */
-function renderKPICards() {
-  const filteredStudents = getFilteredStudents();
-  let totalScoreEarnedAll = 0;
-  let totalScorePossibleAll = 0;
-
-  filteredStudents.forEach(s => {
-    allQuizzes.forEach(q => {
-      const att = attemptByStudentQuiz.get(`${s.id}_${q.id}`);
-      if (att) {
-        totalScoreEarnedAll += Number(att.score || 0);
-        totalScorePossibleAll += Number(att.total_marks || 0);
-      }
-    });
-  });
-
-  const avgPct = totalScorePossibleAll > 0 
-    ? ((totalScoreEarnedAll / totalScorePossibleAll) * 100).toFixed(1) 
-    : '0.0';
-
-  document.getElementById('metric-total-students').textContent = filteredStudents.length;
-  document.getElementById('metric-total-quizzes').textContent = `${allQuizzes.length} / 35`;
-  document.getElementById('metric-class-avg').textContent = `${avgPct}%`;
-  document.getElementById('metric-total-attempts').textContent = allAttempts.length;
-}
-
-/**
- * Renders Complete Class Matrix Table (Q01 to Q35)
- */
-function renderSemesterMatrixTable() {
-  const theadRow = document.getElementById('matrix-table-head-row');
-  const tbody = document.getElementById('matrix-table-body');
-  const tfootRow = document.getElementById('matrix-table-foot-row');
-  if (!theadRow || !tbody) return;
-
-  const filteredStudents = getFilteredStudents();
-
-  // 1. Build Header Row (Student ID | Student Name | Section | Q01 .. Q35 | Total Earned | Total Possible | Percentage | Action)
-  let headHtml = `
-    <th class="sticky-id">Student ID</th>
-    <th class="sticky-name">Student Name</th>
-    <th style="min-width: 70px;">Section</th>
-  `;
-
-  for (let c = 1; c <= 35; c++) {
-    const q = quizByClass.get(c);
-    const qNum = String(c).padStart(2, '0');
-    const isTargetQuiz = (filterState.quizFilter !== 'all' && q && q.id === filterState.quizFilter);
-    const highlightStyle = isTargetQuiz ? 'background: #312e81; color: #a5b4fc; border: 2px solid var(--primary);' : '';
-    const titleAttr = q ? `Class ${qNum}: ${escapeHtml(q.title)} (${q.scheduled_date})` : `Class ${qNum}: Not Created Yet`;
-
-    headHtml += `
-      <th class="matrix-col-q" style="${highlightStyle}" title="${titleAttr}">
-        Q${qNum}
-      </th>
-    `;
-  }
-
-  headHtml += `
-    <th style="min-width: 95px; background: #0f172a; color: var(--success); font-weight: 700;">Total Earned</th>
-    <th style="min-width: 95px; background: #0f172a; color: var(--text-secondary); font-weight: 700;">Total Possible</th>
-    <th style="min-width: 95px; background: #0f172a; color: var(--primary); font-weight: 700;">Percentage</th>
-    <th style="min-width: 90px; background: #0f172a;">Action</th>
-  `;
-
-  theadRow.innerHTML = headHtml;
-
-  // 2. Build Data Rows
-  if (filteredStudents.length === 0) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="43" class="empty-state" style="padding: 3rem 1rem;">
-          <div class="empty-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-          </div>
-          <div class="empty-title">No Students Match Selected Filters</div>
-          <p class="empty-text">Try resetting the Section, Search, or Date filters.</p>
-        </td>
-      </tr>
-    `;
-    if (tfootRow) tfootRow.innerHTML = '';
+    showToast(friendlyError(err), 'danger');
     return;
   }
 
-  // Column sum accumulators for footer
-  const colScoresSum = Array(36).fill(0);
-  const colAttemptsCount = Array(36).fill(0);
-  let overallEarnedSum = 0;
-  let overallPossibleSum = 0;
+  if (courses.length === 0) {
+    document.getElementById('course-switcher').innerHTML = noCoursesHtml();
+    return;
+  }
 
-  const rowsHtml = filteredStudents.map(student => {
-    let studentEarned = 0;
-    let studentPossible = 0;
-    let scoresCellsHtml = '';
+  renderCourseSwitcher(document.getElementById('course-switcher'), courses, pickActiveCourseId(courses), async (id) => {
+    selectedStudentId = null;
+    switchView('matrix');
+    await selectCourse(id);
+  });
+  document.getElementById('page-body').classList.remove('hidden');
+  setupEvents();
 
-    for (let c = 1; c <= 35; c++) {
-      const q = quizByClass.get(c);
-      let cellContent = '<span class="score-pill score-none">-</span>';
+  await selectCourse(pickActiveCourseId(courses));
 
-      if (q) {
-        const att = attemptByStudentQuiz.get(`${student.id}_${q.id}`);
-        if (att) {
-          const sc = Number(att.score || 0);
-          const tot = Number(att.total_marks || 0);
-          studentEarned += sc;
-          studentPossible += tot;
+  const studentParam = new URLSearchParams(window.location.search).get('student');
+  if (studentParam && book?.students.some(s => s.id === studentParam)) showStudent(studentParam);
+}
 
-          colScoresSum[c] += sc;
-          colAttemptsCount[c] += 1;
+async function selectCourse(courseId) {
+  activeCourse = courses.find(c => c.id === courseId);
+  document.getElementById('course-title').textContent = courseLabel(activeCourse);
+  document.getElementById('course-subtitle').textContent = [
+    activeCourse.term,
+    activeCourse.final_weight ? `Quizzes count for ${fmtNum(activeCourse.final_weight)} marks of the final grade` : 'Tip: set a "quiz marks in final grade" weight on the course to get scaled final marks'
+  ].filter(Boolean).join(' · ');
 
-          const pct = tot > 0 ? (sc / tot) * 100 : 0;
-          const colorClass = pct >= 80 ? 'score-high' : pct >= 50 ? 'score-mid' : 'score-low';
+  try {
+    book = await loadCourseGradebook(activeCourse);
+  } catch (err) {
+    showToast('Could not load the gradebook: ' + friendlyError(err), 'danger');
+    return;
+  }
+  heldQuizzes = book.quizzes.filter(q => q.status !== 'draft');
 
-          const formattedScore = Number.isInteger(sc) ? sc : sc.toFixed(1);
-          cellContent = `
-            <span class="score-pill ${colorClass}" title="Class ${c}: ${formattedScore}/${tot} pts (${pct.toFixed(0)}%)">
-              ${formattedScore}
-            </span>
-          `;
-        }
+  const sectionSelect = document.getElementById('filter-section');
+  const sections = [...new Set(book.students.map(s => (s.section || '').trim()).filter(Boolean))].sort();
+  sectionSelect.innerHTML = '<option value="all">All sections</option>' +
+    sections.map(s => `<option value="${escapeHtml(s)}">Section ${escapeHtml(s)}</option>`).join('');
+  filters.section = 'all';
+
+  const studentSelect = document.getElementById('individual-student-select');
+  studentSelect.innerHTML = book.students.map(s =>
+    `<option value="${s.id}">${escapeHtml(s.student_id || '—')} · ${escapeHtml(s.full_name)}</option>`).join('');
+
+  renderMetrics();
+  renderMatrix();
+  if (selectedStudentId) renderIndividual();
+}
+
+function setupEvents() {
+  document.getElementById('filter-student').addEventListener('input', (e) => { filters.term = e.target.value.trim().toLowerCase(); renderMatrix(); });
+  document.getElementById('filter-section').addEventListener('change', (e) => { filters.section = e.target.value; renderMatrix(); });
+  document.getElementById('tab-btn-matrix').addEventListener('click', () => switchView('matrix'));
+  document.getElementById('tab-btn-individual').addEventListener('click', () => {
+    if (!selectedStudentId && book?.students.length) selectedStudentId = book.students[0].id;
+    showStudent(selectedStudentId);
+  });
+  document.getElementById('btn-back-to-matrix').addEventListener('click', () => switchView('matrix'));
+  document.getElementById('individual-student-select').addEventListener('change', (e) => showStudent(e.target.value));
+  document.getElementById('btn-export-gradebook').addEventListener('click', exportGradebook);
+
+  const modal = document.getElementById('answer-modal');
+  modal.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', () => modal.classList.remove('active')));
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('active'); });
+}
+
+function switchView(view) {
+  const matrix = view === 'matrix';
+  document.getElementById('tab-btn-matrix').classList.toggle('active', matrix);
+  document.getElementById('tab-btn-individual').classList.toggle('active', !matrix);
+  document.getElementById('view-matrix-pane').classList.toggle('hidden', !matrix);
+  document.getElementById('view-individual-pane').classList.toggle('hidden', matrix);
+}
+
+function showStudent(studentId) {
+  if (!studentId) {
+    switchView('individual');
+    document.getElementById('student-individual-content').innerHTML =
+      `<div class="card">${emptyState('users', 'No students yet', 'Students appear here after they join the course.')}</div>`;
+    return;
+  }
+  selectedStudentId = studentId;
+  document.getElementById('individual-student-select').value = studentId;
+  switchView('individual');
+  renderIndividual();
+}
+
+function filteredStudents() {
+  return book.students.filter(s => {
+    if (filters.section !== 'all' && (s.section || '').trim() !== filters.section) return false;
+    if (!filters.term) return true;
+    return [s.full_name, s.student_id, s.email].some(v => (v || '').toLowerCase().includes(filters.term));
+  });
+}
+
+// ------------------------------------------------------------------------------
+// Metrics & matrix
+// ------------------------------------------------------------------------------
+
+function renderMetrics() {
+  const counted = [...book.summaries.values()].filter(s => s.counted > 0);
+  const avg = counted.length ? counted.reduce((n, s) => n + s.percentage, 0) / counted.length : null;
+  let taken = 0, expected = 0;
+  book.summaries.forEach(s => { taken += s.attempted; expected += s.counted; });
+
+  document.getElementById('metric-students').textContent = book.students.length;
+  document.getElementById('metric-quizzes').textContent = heldQuizzes.length;
+  document.getElementById('metric-avg').textContent = avg === null ? '–' : fmtPct(avg);
+  document.getElementById('metric-participation').textContent = expected ? fmtPct(percentOf(taken, expected), 0) : '–';
+}
+
+function renderMatrix() {
+  const head = document.getElementById('matrix-table-head-row');
+  const body = document.getElementById('matrix-table-body');
+  const foot = document.getElementById('matrix-table-foot-row');
+  const weight = activeCourse.final_weight;
+  const totalCols = 3 + heldQuizzes.length + 3 + (weight ? 1 : 0);
+
+  head.innerHTML = `
+    <th class="sticky-id">Roll No.</th>
+    <th class="sticky-name">Student</th>
+    <th>Sec.</th>
+    ${heldQuizzes.map(q => `
+      <th class="matrix-col-q" title="${escapeHtml(`${classLabel(q.class_number)}: ${q.title} (${fmtDate(q.scheduled_date)}) · ${fmtNum(q.total_marks)} marks`)}">
+        C${String(q.class_number).padStart(2, '0')}<div class="small muted" style="font-weight: 500;">/${fmtNum(q.total_marks)}</div>
+      </th>`).join('')}
+    <th>Earned</th>
+    <th>Possible</th>
+    <th>%</th>
+    ${weight ? `<th>Final /${fmtNum(weight)}</th>` : ''}
+  `;
+
+  const list = filteredStudents();
+  if (list.length === 0) {
+    body.innerHTML = `<tr><td colspan="${totalCols}" style="text-align: left;">${book.students.length === 0
+      ? emptyState('users', 'No students enrolled yet', `Share join code ${activeCourse.join_code} with your class.`)
+      : emptyState('search', 'No students match', 'Clear the search or section filter.')}</td></tr>`;
+    foot.innerHTML = '';
+    return;
+  }
+
+  const colSum = heldQuizzes.map(() => 0);
+  const colCount = heldQuizzes.map(() => 0);
+
+  body.innerHTML = list.map(student => {
+    const sum = book.summaries.get(student.id);
+    const attempts = book.attemptsByStudent.get(student.id) || new Map();
+
+    const cells = heldQuizzes.map((q, i) => {
+      const att = attempts.get(q.id);
+      if (att) {
+        const sc = Number(att.score);
+        const pct = percentOf(sc, Number(att.total_marks));
+        colSum[i] += sc;
+        colCount[i] += 1;
+        return `<td class="matrix-col-q"><span class="score-pill ${scorePillClass(pct)}" title="${fmtNum(sc)} / ${fmtNum(att.total_marks)} (${fmtPct(pct, 0)})">${fmtNum(sc)}</span></td>`;
       }
-
-      scoresCellsHtml += `<td class="matrix-col-q">${cellContent}</td>`;
-    }
-
-    overallEarnedSum += studentEarned;
-    overallPossibleSum += studentPossible;
-
-    const studentPct = studentPossible > 0 
-      ? ((studentEarned / studentPossible) * 100).toFixed(2) 
-      : '0.00';
-
-    const pctBadgeClass = Number(studentPct) >= 80 ? 'badge-published' : Number(studentPct) >= 50 ? 'badge-warning' : 'badge-closed';
+      return isQuizClosed(q)
+        ? '<td class="matrix-col-q"><span class="score-pill score-missed" title="Missed">0</span></td>'
+        : '<td class="matrix-col-q"><span class="score-pill score-none" title="Open — not taken yet">·</span></td>';
+    }).join('');
 
     return `
       <tr>
-        <td class="sticky-id">
-          <a href="javascript:void(0)" onclick="window.viewStudentResults('${student.id}')" style="color: var(--primary); font-family: var(--font-heading); text-decoration: none;">
-            ${escapeHtml(student.student_id || 'ID')}
-          </a>
-        </td>
-        <td class="sticky-name">
-          <a href="javascript:void(0)" onclick="window.viewStudentResults('${student.id}')" style="color: var(--text-primary); text-decoration: none;">
-            ${escapeHtml(student.full_name || 'Student')}
-          </a>
-        </td>
-        <td>
-          <span class="badge badge-primary">${escapeHtml(student.section || 'A')}</span>
-        </td>
-        ${scoresCellsHtml}
-        <td style="font-weight: 700; color: var(--success); font-size: 0.95rem;">
-          ${Number.isInteger(studentEarned) ? studentEarned : studentEarned.toFixed(2)}
-        </td>
-        <td style="font-weight: 600; color: var(--text-muted); font-size: 0.95rem;">
-          ${Number.isInteger(studentPossible) ? studentPossible : studentPossible.toFixed(2)}
-        </td>
-        <td>
-          <span class="badge ${pctBadgeClass}" style="font-size: 0.85rem;">${studentPct}%</span>
-        </td>
-        <td>
-          <button class="btn btn-outline btn-sm" onclick="window.viewStudentResults('${student.id}')">
-            View &rarr;
-          </button>
+        <td class="sticky-id"><button class="link-button mono" data-student="${student.id}">${escapeHtml(student.student_id || '—')}</button></td>
+        <td class="sticky-name"><button class="link-button" style="color: var(--text-primary); font-weight: 600; text-align: left;" data-student="${student.id}">${escapeHtml(student.full_name)}</button></td>
+        <td>${escapeHtml(student.section || '—')}</td>
+        ${cells}
+        <td class="strong text-success">${fmtNum(sum.earned)}</td>
+        <td class="muted">${fmtNum(sum.possible)}</td>
+        <td>${sum.counted ? `<span class="badge ${pctBadgeClass(sum.percentage)}">${fmtPct(sum.percentage)}</span>` : '–'}</td>
+        ${weight ? `<td class="strong">${sum.counted ? fmtNum(sum.weighted) : '–'}</td>` : ''}
+      </tr>
+    `;
+  }).join('');
+
+  body.querySelectorAll('[data-student]').forEach(btn => btn.addEventListener('click', () => showStudent(btn.dataset.student)));
+
+  const listSummaries = list.map(s => book.summaries.get(s.id)).filter(s => s.counted > 0);
+  const avgPct = listSummaries.length ? listSummaries.reduce((n, s) => n + s.percentage, 0) / listSummaries.length : null;
+  const avgWeighted = weight && listSummaries.length ? listSummaries.reduce((n, s) => n + s.weighted, 0) / listSummaries.length : null;
+
+  foot.innerHTML = `
+    <th class="sticky-id">Average</th>
+    <th class="sticky-name small muted">of students who took it</th>
+    <th></th>
+    ${heldQuizzes.map((q, i) => `<th class="matrix-col-q small">${colCount[i] ? fmtNum(colSum[i] / colCount[i], 1) : '–'}</th>`).join('')}
+    <th></th>
+    <th></th>
+    <th>${avgPct === null ? '–' : fmtPct(avgPct)}</th>
+    ${weight ? `<th>${avgWeighted === null ? '–' : fmtNum(avgWeighted)}</th>` : ''}
+  `;
+}
+
+// ------------------------------------------------------------------------------
+// Individual student
+// ------------------------------------------------------------------------------
+
+function renderIndividual() {
+  const container = document.getElementById('student-individual-content');
+  const student = book.students.find(s => s.id === selectedStudentId);
+  if (!student) {
+    container.innerHTML = '<div class="alert alert-warning">This student is no longer enrolled in the course.</div>';
+    return;
+  }
+  const sum = book.summaries.get(student.id);
+  const weight = activeCourse.final_weight;
+
+  const rows = sum.rows.map(({ quiz, attempt, state }) => {
+    const pct = attempt ? percentOf(Number(attempt.score), Number(attempt.total_marks)) : 0;
+    const status = { attempted: '<span class="badge badge-published">Taken</span>', missed: '<span class="badge badge-closed">Missed</span>', pending: '<span class="badge badge-warning">Open</span>' }[state];
+    return `
+      <tr class="${state === 'missed' ? 'state-missed' : ''}">
+        <td class="nowrap">${classLabel(quiz.class_number)}</td>
+        <td><strong class="strong">${escapeHtml(quiz.title)}</strong></td>
+        <td class="small nowrap">${fmtDate(quiz.scheduled_date)}</td>
+        <td>${status}</td>
+        <td class="nowrap">${attempt ? `${fmtNum(attempt.score)} / ${fmtNum(attempt.total_marks)}` : state === 'missed' ? `0 / ${fmtNum(quiz.total_marks)}` : '–'}</td>
+        <td>${attempt ? `<span class="badge ${pctBadgeClass(pct)}">${fmtPct(pct, 0)}</span>` : '–'}</td>
+        <td class="small nowrap">${attempt ? fmtDateTime(attempt.submitted_at) : ''}</td>
+        <td class="nowrap no-print">${attempt ? `
+          <button class="btn btn-outline btn-sm" data-inspect="${attempt.id}">Answers</button>
+          <button class="btn btn-danger-outline btn-sm" data-retake="${attempt.id}" title="Delete this attempt so the student can take the quiz again">Allow retake</button>` : ''}
         </td>
       </tr>
     `;
   }).join('');
 
-  tbody.innerHTML = rowsHtml;
-
-  // 3. Build Footer Row (Class Averages)
-  if (tfootRow) {
-    let footHtml = `
-      <th class="sticky-id" style="background: #020617; color: var(--text-muted); text-transform: uppercase; font-size: 0.75rem;">Class Avg</th>
-      <th class="sticky-name" style="background: #020617; color: var(--text-muted); font-size: 0.8rem;">Average Across Students</th>
-      <th style="background: #020617; color: var(--text-muted);">-</th>
-    `;
-
-    for (let c = 1; c <= 35; c++) {
-      const count = colAttemptsCount[c];
-      const sum = colScoresSum[c];
-      const avg = count > 0 ? (sum / count).toFixed(1) : '-';
-      footHtml += `
-        <th class="matrix-col-q" style="background: #020617; color: var(--text-secondary); font-size: 0.8rem;">
-          ${avg}
-        </th>
-      `;
-    }
-
-    const nStudents = filteredStudents.length;
-    const avgEarned = nStudents > 0 ? (overallEarnedSum / nStudents).toFixed(1) : '0.0';
-    const avgPossible = nStudents > 0 ? (overallPossibleSum / nStudents).toFixed(1) : '0.0';
-    const overallPct = overallPossibleSum > 0 ? ((overallEarnedSum / overallPossibleSum) * 100).toFixed(2) : '0.00';
-
-    footHtml += `
-      <th style="background: #020617; color: var(--success); font-weight: 700;">${avgEarned}</th>
-      <th style="background: #020617; color: var(--text-muted); font-weight: 700;">${avgPossible}</th>
-      <th style="background: #020617; color: var(--primary); font-weight: 700;">${overallPct}%</th>
-      <th style="background: #020617;">-</th>
-    `;
-
-    tfootRow.innerHTML = footHtml;
-  }
-}
-
-/**
- * Expose viewStudentResults globally for inline clicks
- */
-window.viewStudentResults = function(studentId) {
-  currentSelectedStudentId = studentId;
-  const select = document.getElementById('individual-student-select');
-  if (select) select.value = studentId;
-  switchView('individual');
-};
-
-/**
- * Renders the Individual Student Result View
- */
-function renderIndividualStudentView() {
-  const container = document.getElementById('student-individual-content');
-  if (!container) return;
-
-  if (!currentSelectedStudentId) {
-    container.innerHTML = `
-      <div class="empty-state" style="padding: 3rem 1rem;">
-        <div class="empty-icon">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-          </svg>
-        </div>
-        <div class="empty-title">Select a Student</div>
-        <p class="empty-text">Choose a student from the dropdown above or click on any row in the Class Matrix.</p>
-      </div>
-    `;
-    return;
-  }
-
-  const student = allStudents.find(s => s.id === currentSelectedStudentId);
-  if (!student) {
-    container.innerHTML = '<div class="alert alert-danger">Student record not found.</div>';
-    return;
-  }
-
-  // Calculate student specific semester stats
-  let totalEarned = 0;
-  let totalPossible = 0;
-  let attemptedCount = 0;
-
-  const quizRows = allQuizzes.map(quiz => {
-    const att = attemptByStudentQuiz.get(`${student.id}_${quiz.id}`);
-    const isAttempted = Boolean(att);
-
-    if (isAttempted) {
-      totalEarned += Number(att.score || 0);
-      totalPossible += Number(att.total_marks || 0);
-      attemptedCount++;
-    }
-
-    const sc = isAttempted ? Number(att.score || 0) : 0;
-    const tot = isAttempted ? Number(att.total_marks || 0) : 0;
-    const pct = tot > 0 ? ((sc / tot) * 100).toFixed(1) : '0.0';
-    const subTime = isAttempted 
-      ? new Date(att.submitted_at).toLocaleString() 
-      : 'Unattempted';
-
-    const badgeClass = isAttempted ? 'badge-published' : 'badge-closed';
-    const statusText = isAttempted ? 'Completed' : 'Not Attempted';
-
-    return {
-      quiz,
-      att,
-      isAttempted,
-      score: sc,
-      total: tot,
-      percentage: pct,
-      subTime,
-      badgeClass,
-      statusText
-    };
-  });
-
-  const percentage = totalPossible > 0 
-    ? ((totalEarned / totalPossible) * 100).toFixed(2) 
-    : '0.00';
-
-  const formatNum = (n) => Number.isInteger(n) ? n : n.toFixed(2);
-
   container.innerHTML = `
-    <!-- Student Profile Header Banner -->
-    <div class="card" style="background: radial-gradient(circle at top left, rgba(79, 70, 229, 0.08), var(--bg-card)); padding: 1.75rem 2rem; margin-bottom: 1.75rem;">
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1.5rem;">
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="section-head" style="margin-bottom: 0;">
         <div>
-          <div style="font-size: 0.85rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;">
-            Individual Student Performance Report
-          </div>
-          <h2 style="font-size: 2rem; margin-bottom: 0.35rem; color: var(--text-primary);">
-            ${escapeHtml(student.full_name || 'Student')}
-          </h2>
-          <div style="display: flex; gap: 1.5rem; flex-wrap: wrap; font-size: 0.95rem; color: var(--text-secondary); margin-top: 0.5rem;">
-            <span>Roll ID: <strong style="color: var(--text-primary);">${escapeHtml(student.student_id || 'N/A')}</strong></span>
-            <span>Section: <strong style="color: var(--text-primary);">${escapeHtml(student.section || 'A')}</strong></span>
-            <span>Email: <span style="color: var(--text-muted);">${escapeHtml(student.email || 'N/A')}</span></span>
-          </div>
+          <div class="page-eyebrow">Semester report</div>
+          <h2 style="margin-bottom: 0.25rem;">${escapeHtml(student.full_name)}</h2>
+          <div class="small muted">${escapeHtml([student.student_id && `Roll No: ${student.student_id}`, student.section && `Section ${student.section}`, student.email].filter(Boolean).join(' · '))}</div>
         </div>
-
-        <div style="display: flex; gap: 0.75rem;">
-          <button class="btn btn-secondary btn-sm" onclick="window.exportCurrentStudentCSV()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            Export Student Report (CSV)
-          </button>
+        <div class="toolbar no-print">
+          <button id="btn-export-student" class="btn btn-secondary btn-sm">Export report (CSV)</button>
+          <button id="btn-print-student" class="btn btn-outline btn-sm">Print</button>
         </div>
+      </div>
+      <div class="report-summary">
+        <div><div class="mini-stat-value">${sum.attempted} / ${sum.counted}</div><div class="mini-stat-label">Quizzes taken</div></div>
+        <div><div class="mini-stat-value">${fmtNum(sum.earned)} / ${fmtNum(sum.possible)}</div><div class="mini-stat-label">Marks earned</div></div>
+        <div><div class="mini-stat-value text-primary">${sum.counted ? fmtPct(sum.percentage) : '–'}</div><div class="mini-stat-label">Semester score</div></div>
+        ${weight ? `<div><div class="mini-stat-value text-success">${sum.counted ? fmtNum(sum.weighted) : '–'} / ${fmtNum(weight)}</div><div class="mini-stat-label">Final quiz marks</div></div>` : ''}
       </div>
     </div>
 
-    <!-- Student KPI Summary Tiles -->
-    <div class="stat-grid" style="margin-bottom: 2rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
-      <div class="stat-card">
-        <div class="stat-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
-            <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
-            <path d="M4 22h16"/>
-            <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
-            <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
-            <path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/>
-          </svg>
-        </div>
-        <div class="stat-content">
-          <div class="stat-value" style="color: var(--success);">${formatNum(totalEarned)}</div>
-          <div class="stat-label">Total Earned Marks</div>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
-          </svg>
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">${formatNum(totalPossible)}</div>
-          <div class="stat-label">Total Possible Marks</div>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
-          </svg>
-        </div>
-        <div class="stat-content">
-          <div class="stat-value" style="color: var(--primary);">${percentage}%</div>
-          <div class="stat-label">Semester Accuracy</div>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-          </svg>
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">${attemptedCount} / ${allQuizzes.length}</div>
-          <div class="stat-label">Quizzes Attempted</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Student Quizzes Breakdown Table -->
-    <div class="card" style="padding: 1.5rem;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
-        <h3 class="card-title" style="margin: 0;">Complete Quiz Record</h3>
-        <span style="font-size: 0.85rem; color: var(--text-muted);">
-          Click "Inspect Answers" to view full question prompts and selected options
-        </span>
-      </div>
-
-      <div class="table-container">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Class #</th>
-              <th>Topic / Quiz Title</th>
-              <th>Date</th>
-              <th>Status</th>
-              <th>Score</th>
-              <th>Percentage</th>
-              <th>Submission Time</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${quizRows.map(row => {
-              const q = row.quiz;
-              const classNum = String(q.class_number).padStart(2, '0');
-              const inspectBtn = row.isAttempted
-                ? `<button class="btn btn-outline btn-sm" onclick="window.inspectStudentAttempt('${row.att.id}', '${escapeHtml(student.full_name)}')">Inspect Answers &rarr;</button>`
-                : `<span style="color: var(--text-muted); font-size: 0.8rem;">Unattempted</span>`;
-
-              return `
-                <tr>
-                  <td><span class="badge badge-primary">Class ${classNum}</span></td>
-                  <td><strong style="color: var(--text-primary);">${escapeHtml(q.title)}</strong></td>
-                  <td><span style="color: var(--text-muted); font-size: 0.9rem;">${q.scheduled_date}</span></td>
-                  <td><span class="badge ${row.badgeClass}">${row.statusText}</span></td>
-                  <td>
-                    ${row.isAttempted ? `<strong style="color: var(--success);">${row.score} / ${row.total}</strong>` : '-'}
-                  </td>
-                  <td>
-                    ${row.isAttempted ? `<span class="badge ${Number(row.percentage) >= 80 ? 'badge-published' : 'badge-warning'}">${row.percentage}%</span>` : '-'}
-                  </td>
-                  <td><span style="color: var(--text-secondary); font-size: 0.85rem;">${row.subTime}</span></td>
-                  <td>${inspectBtn}</td>
-                </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    ${sum.rows.length === 0
+      ? `<div class="card">${emptyState('book', 'No quizzes held yet', 'Published quizzes will be listed here.')}</div>`
+      : `<div class="table-container">
+          <table class="data-table">
+            <thead><tr><th>Class</th><th>Quiz</th><th>Date</th><th>Status</th><th>Score</th><th>%</th><th>Submitted</th><th class="no-print"></th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`}
   `;
+
+  container.querySelector('#btn-export-student').addEventListener('click', () => exportStudent(student));
+  container.querySelector('#btn-print-student').addEventListener('click', () => window.print());
+  container.querySelectorAll('[data-inspect]').forEach(btn => btn.addEventListener('click', () => inspectAttempt(btn.dataset.inspect, student)));
+  container.querySelectorAll('[data-retake]').forEach(btn => btn.addEventListener('click', () => allowRetake(btn.dataset.retake, student)));
 }
 
-/**
- * Opens modal allowing the teacher to inspect individual question answers for an attempt
- */
-window.inspectStudentAttempt = async function(attemptId, studentName) {
-  const supabase = getSupabase();
-  const modal = document.getElementById('quiz-answer-inspector-modal');
-  const title = document.getElementById('inspector-modal-title');
-  const scoreBadge = document.getElementById('inspector-score-badge');
-  const body = document.getElementById('inspector-modal-body');
-
+async function inspectAttempt(attemptId, student) {
+  const modal = document.getElementById('answer-modal');
+  const body = document.getElementById('answer-modal-body');
+  const badge = document.getElementById('answer-modal-badge');
+  document.getElementById('answer-modal-title').textContent = student.full_name;
+  badge.textContent = '';
+  body.innerHTML = '<p class="muted" style="text-align: center; padding: 2rem;">Loading answers...</p>';
   modal.classList.add('active');
-  body.innerHTML = `
-    <div style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
-      <div class="empty-icon" style="margin: 0 auto 0.75rem;">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-        </svg>
-      </div>
-      <div>Loading student attempt answers...</div>
-    </div>
-  `;
 
   try {
-    // 1. Fetch attempt and quiz details
-    const { data: att, error: attErr } = await supabase
-      .from('quiz_attempts')
-      .select('*, quizzes(*)')
-      .eq('id', attemptId)
-      .single();
-
-    if (attErr) throw attErr;
-
-    const q = att.quizzes;
-    title.textContent = `${studentName} — Class ${String(q?.class_number || 0).padStart(2, '0')}: ${q?.title || 'Quiz'}`;
-    scoreBadge.textContent = `Score: ${att.score} / ${att.total_marks}`;
-
-    // 2. Fetch questions and student answers
-    const [answersRes, questionsRes] = await Promise.all([
-      supabase.from('attempt_answers').select('*').eq('attempt_id', attemptId),
-      supabase.from('questions').select('*').eq('quiz_id', att.quiz_id).order('order_index', { ascending: true })
-    ]);
-
-    const answers = answersRes.data || [];
-    const questions = questionsRes.data || [];
-    const answerMap = new Map(answers.map(a => [a.question_id, a]));
-
-    body.innerHTML = questions.map((question, idx) => {
-      const userAns = answerMap.get(question.id);
-      const isCorrect = userAns ? Boolean(userAns.is_correct) : false;
-      const awarded = userAns ? Number(userAns.marks_awarded || 0) : 0;
-      const possible = Number(question.marks || 1.0);
-      const selectedId = userAns ? (userAns.selected_option || 'None (Skipped)') : 'None';
-
-      const options = question.options || [];
-      const selectedObj = options.find(o => o.id === selectedId);
-      const selectedText = selectedObj ? selectedObj.text : '';
-
-      const correctId = question.correct_option || 'A';
-      const correctObj = options.find(o => o.id === correctId);
-      const correctText = correctObj ? correctObj.text : '';
-
-      const statusColor = isCorrect ? 'var(--success)' : 'var(--danger)';
-      const statusIcon = isCorrect 
-        ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px;"><polyline points="20 6 9 17 4 12"/></svg>`
-        : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
-
-      return `
-        <div class="card" style="margin-bottom: 1.25rem; background: var(--bg-card); border-left: 4px solid ${statusColor};">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-            <span style="font-weight: 700; font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase;">
-              Question ${idx + 1}
-            </span>
-            <span style="font-weight: 700; font-size: 0.9rem; color: ${statusColor}; display: inline-flex; align-items: center; gap: 0.35rem;">
-              ${statusIcon} ${isCorrect ? 'Correct' : 'Incorrect'} (${awarded} / ${possible} pt)
-            </span>
-          </div>
-
-          <div style="font-size: 1.05rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--text-primary); line-height: 1.4;">
-            ${escapeHtml(question.question_text)}
-          </div>
-
-          <div style="background: #f8fafc; padding: 0.85rem 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 0.92rem;">
-            <div>
-              <span style="color: var(--text-muted);">Student's Selected Answer:</span>
-              <strong style="color: ${statusColor}; margin-left: 0.35rem;">
-                Option ${selectedId}${selectedText ? `: ${escapeHtml(selectedText)}` : ''}
-              </strong>
-            </div>
-
-            <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--border-color); color: var(--success);">
-              <strong>Correct Key:</strong> Option ${correctId}${correctText ? `: ${escapeHtml(correctText)}` : ''}
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
-
+    const review = await fetchAttemptReview(attemptId);
+    document.getElementById('answer-modal-title').textContent = `${student.full_name} — ${reviewTitle(review)}`;
+    const pct = percentOf(Number(review.attempt.score), Number(review.attempt.total_marks));
+    badge.textContent = `Score: ${fmtNum(review.attempt.score)} / ${fmtNum(review.attempt.total_marks)} (${fmtPct(pct, 0)})`;
+    badge.className = `badge ${pctBadgeClass(pct)}`;
+    body.innerHTML = renderReviewHtml(review, 'teacher');
   } catch (err) {
-    console.error('Error loading attempt answers:', err);
-    body.innerHTML = `<div class="alert alert-danger">Failed to load attempt details: ${err.message}</div>`;
-  }
-};
-
-function closeAnswerModal() {
-  document.getElementById('quiz-answer-inspector-modal')?.classList.remove('active');
-}
-
-/**
- * Export Complete 35-Class Semester Matrix as RFC 4180 CSV
- */
-export function exportSemesterMatrixCSV() {
-  try {
-    showToast('Preparing complete semester matrix CSV...', 'info');
-
-    const headers = ['Student ID', 'Student Name', 'Section', 'Email'];
-    for (let c = 1; c <= 35; c++) {
-      const q = quizByClass.get(c);
-      const title = q ? `Class ${String(c).padStart(2, '0')} - ${escapeCsv(q.title)}` : `Class ${String(c).padStart(2, '0')}`;
-      headers.push(title);
-    }
-    headers.push('Total Earned Marks', 'Total Possible Marks', 'Semester Percentage (%)');
-
-    const rows = [headers.join(',')];
-
-    allStudents.forEach(student => {
-      let earned = 0;
-      let possible = 0;
-
-      const row = [
-        escapeCsv(student.student_id || 'N/A'),
-        escapeCsv(student.full_name || 'N/A'),
-        escapeCsv(student.section || 'A'),
-        escapeCsv(student.email || 'N/A')
-      ];
-
-      for (let c = 1; c <= 35; c++) {
-        const q = quizByClass.get(c);
-        if (q) {
-          const att = attemptByStudentQuiz.get(`${student.id}_${q.id}`);
-          if (att) {
-            const sc = Number(att.score || 0);
-            const tot = Number(att.total_marks || 0);
-            earned += sc;
-            possible += tot;
-            row.push(sc.toFixed(1));
-          } else {
-            row.push('0.0'); // Unattempted
-          }
-        } else {
-          row.push('0.0'); // Unscheduled class
-        }
-      }
-
-      const pct = possible > 0 ? ((earned / possible) * 100).toFixed(2) : '0.00';
-      row.push(earned.toFixed(1));
-      row.push(possible.toFixed(1));
-      row.push(`${pct}%`);
-
-      rows.push(row.join(','));
-    });
-
-    const dateStr = new Date().toISOString().split('T')[0];
-    downloadCsvBlob(rows.join('\r\n'), `Full_Semester_Matrix_Gradebook_${dateStr}.csv`);
-    showToast('Semester Matrix CSV downloaded successfully!', 'success');
-
-  } catch (err) {
-    console.error('CSV export error:', err);
-    showToast('Failed to export matrix CSV: ' + err.message, 'danger');
+    body.innerHTML = `<div class="alert alert-danger">${escapeHtml(friendlyError(err))}</div>`;
   }
 }
 
-/**
- * Export Currently Filtered Matrix as CSV
- */
-export function exportFilteredMatrixCSV() {
-  try {
-    const filtered = getFilteredStudents();
-    if (filtered.length === 0) {
-      showToast('No filtered students to export.', 'warning');
-      return;
-    }
+async function allowRetake(attemptId, student) {
+  const attempt = book.attempts.find(a => a.id === attemptId);
+  const quiz = book.quizzes.find(q => q.id === attempt?.quiz_id);
+  const note = quiz && isQuizClosed(quiz) ? '\n\nThis quiz is closed — reopen it so the student can take it again.' : '';
+  if (!confirm(`Delete ${student.full_name}'s attempt at "${quiz?.title}" (score ${fmtNum(attempt?.score)})? They can then take the quiz again. This cannot be undone.${note}`)) return;
 
-    const headers = ['Student ID', 'Student Name', 'Section', 'Email'];
-    for (let c = 1; c <= 35; c++) {
-      headers.push(`Class ${String(c).padStart(2, '0')}`);
-    }
-    headers.push('Total Earned', 'Total Possible', 'Percentage');
-
-    const rows = [headers.join(',')];
-
-    filtered.forEach(student => {
-      let earned = 0;
-      let possible = 0;
-
-      const row = [
-        escapeCsv(student.student_id || 'N/A'),
-        escapeCsv(student.full_name || 'N/A'),
-        escapeCsv(student.section || 'A'),
-        escapeCsv(student.email || 'N/A')
-      ];
-
-      for (let c = 1; c <= 35; c++) {
-        const q = quizByClass.get(c);
-        if (q) {
-          const att = attemptByStudentQuiz.get(`${student.id}_${q.id}`);
-          if (att) {
-            const sc = Number(att.score || 0);
-            earned += sc;
-            possible += Number(att.total_marks || 0);
-            row.push(sc.toFixed(1));
-          } else {
-            row.push('0.0');
-          }
-        } else {
-          row.push('0.0');
-        }
-      }
-
-      const pct = possible > 0 ? ((earned / possible) * 100).toFixed(2) : '0.00';
-      row.push(earned.toFixed(1));
-      row.push(possible.toFixed(1));
-      row.push(`${pct}%`);
-
-      rows.push(row.join(','));
-    });
-
-    const dateStr = new Date().toISOString().split('T')[0];
-    downloadCsvBlob(rows.join('\r\n'), `Filtered_Semester_Matrix_${dateStr}.csv`);
-    showToast('Filtered Matrix CSV downloaded!', 'success');
-
-  } catch (err) {
-    showToast('Export failed: ' + err.message, 'danger');
+  const { error, count } = await getSupabase().from('quiz_attempts').delete({ count: 'exact' }).eq('id', attemptId);
+  if (error || count === 0) {
+    showToast('Could not reset the attempt' + (error ? `: ${friendlyError(error)}` : '.'), 'danger');
+    return;
   }
+  showToast(`Attempt deleted — ${student.full_name} can retake the quiz.`, 'success');
+  await selectCourse(activeCourse.id);
 }
 
-/**
- * Export Individual Student Performance Report as CSV
- */
-window.exportCurrentStudentCSV = function() {
-  if (!currentSelectedStudentId) return;
-  const student = allStudents.find(s => s.id === currentSelectedStudentId);
-  if (!student) return;
+// ------------------------------------------------------------------------------
+// CSV
+// ------------------------------------------------------------------------------
 
-  const headers = ['Class #', 'Quiz Title', 'Scheduled Date', 'Status', 'Score', 'Total Marks', 'Accuracy (%)', 'Submission Time'];
-  const rows = [headers.join(',')];
+function exportGradebook() {
+  const list = filteredStudents();
+  if (list.length === 0) {
+    showToast('No students to export.', 'warning');
+    return;
+  }
+  const weight = activeCourse.final_weight;
+  const header = ['Roll No', 'Name', 'Section', 'Email',
+    ...heldQuizzes.map(q => `${classLabel(q.class_number)} - ${q.title} (/${fmtNum(q.total_marks)})`),
+    'Quizzes Taken', 'Quizzes Held', 'Marks Earned', 'Marks Possible', 'Percentage'];
+  if (weight) header.push(`Final Marks (/${fmtNum(weight)})`);
 
-  allQuizzes.forEach(q => {
-    const att = attemptByStudentQuiz.get(`${student.id}_${q.id}`);
-    const isAttempted = Boolean(att);
-    const sc = isAttempted ? Number(att.score || 0) : 0;
-    const tot = isAttempted ? Number(att.total_marks || 0) : 0;
-    const pct = tot > 0 ? ((sc / tot) * 100).toFixed(1) : '0.0';
-    const subTime = isAttempted ? new Date(att.submitted_at).toLocaleString() : 'Unattempted';
-
-    rows.push([
-      `Class ${String(q.class_number).padStart(2, '0')}`,
-      escapeCsv(q.title),
-      escapeCsv(q.scheduled_date),
-      isAttempted ? 'Completed' : 'Missed',
-      sc.toFixed(1),
-      tot.toFixed(1),
-      `${pct}%`,
-      escapeCsv(subTime)
-    ].join(','));
+  const rows = [header];
+  list.forEach(s => {
+    const sum = book.summaries.get(s.id);
+    const attempts = book.attemptsByStudent.get(s.id) || new Map();
+    const row = [s.student_id || '', s.full_name, s.section || '', s.email,
+      ...heldQuizzes.map(q => {
+        const att = attempts.get(q.id);
+        if (att) return Number(att.score);
+        return isQuizClosed(q) ? 0 : '';
+      }),
+      sum.attempted, sum.counted, Number(fmtNum(sum.earned)), Number(fmtNum(sum.possible)), Number(sum.percentage.toFixed(2))];
+    if (weight) row.push(Number(fmtNum(sum.weighted || 0)));
+    rows.push(row);
   });
 
-  const roll = (student.student_id || 'student').replace(/[^a-zA-Z0-9_-]/g, '_');
-  downloadCsvBlob(rows.join('\r\n'), `Student_Report_${roll}.csv`);
-  showToast(`Report downloaded for ${student.full_name}!`, 'success');
-};
-
-function escapeCsv(str) {
-  if (str === null || str === undefined) return '""';
-  const text = String(str).replace(/"/g, '""');
-  return `"${text}"`;
+  const date = new Date().toISOString().slice(0, 10);
+  downloadCsv(rows, `${safeFilename(activeCourse.code)}_Gradebook_${date}.csv`);
+  showToast('Gradebook exported.', 'success');
 }
 
-function escapeHtml(str) {
-  return (str || '')
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+function exportStudent(student) {
+  const sum = book.summaries.get(student.id);
+  const rows = [['Class', 'Quiz', 'Date', 'Status', 'Score', 'Out Of', 'Percentage', 'Submitted']];
+  sum.rows.forEach(({ quiz, attempt, state }) => {
+    rows.push([
+      classLabel(quiz.class_number), quiz.title, quiz.scheduled_date,
+      { attempted: 'Taken', missed: 'Missed', pending: 'Open' }[state],
+      attempt ? Number(attempt.score) : state === 'missed' ? 0 : '',
+      attempt ? Number(attempt.total_marks) : Number(quiz.total_marks),
+      attempt ? Number(percentOf(Number(attempt.score), Number(attempt.total_marks)).toFixed(2)) : state === 'missed' ? 0 : '',
+      attempt ? fmtDateTime(attempt.submitted_at) : ''
+    ]);
+  });
+  rows.push([]);
+  rows.push(['Semester total', '', '', '', Number(fmtNum(sum.earned)), Number(fmtNum(sum.possible)), Number(sum.percentage.toFixed(2)), '']);
+  if (activeCourse.final_weight) rows.push([`Final quiz marks (/${fmtNum(activeCourse.final_weight)})`, '', '', '', Number(fmtNum(sum.weighted || 0))]);
+
+  downloadCsv(rows, `${safeFilename(activeCourse.code)}_${safeFilename(student.student_id || student.full_name)}_Report.csv`);
 }
 
-function downloadCsvBlob(csvContent, filename) {
-  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.setAttribute('href', url);
-  link.setAttribute('download', filename);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
+document.addEventListener('DOMContentLoaded', initGradebook);

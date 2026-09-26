@@ -1,126 +1,107 @@
 /**
  * ==============================================================================
- * js/auth.js - Student & Instructor Authentication System
+ * js/auth.js - Student & Teacher Authentication, Route Guards, Navigation Bar
  * ==============================================================================
- * Pure Supabase Auth integration without server-side Node.js dependencies.
- * Never stores or exposes raw passwords in custom database tables.
+ * Pure Supabase Auth integration without server-side dependencies.
+ * Roles live in public.profiles and are assigned by the database trigger:
+ * a teacher account requires the faculty sign-up code (see sql/setup.sql).
  */
 
 import { getSupabase, showToast } from './supabase.js';
+import { APP_CONFIG } from './config.js';
+import { rootUrl, escapeHtml, friendlyError } from './utils.js';
+
+export const isTeacherRole = (role) => role === 'teacher' || role === 'admin';
+
+/** Landing page for a signed-in user. */
+export function homeUrlFor(profile) {
+  return rootUrl(isTeacherRole(profile?.role) ? 'admin/index.html' : 'dashboard.html');
+}
 
 /**
- * Register a new student account.
- * Collects Full Name, Student ID, Email, Password, and Section/Class.
+ * Register a student or teacher account.
+ * Students provide a roll number and section; teachers provide the faculty code.
  */
-export async function registerStudent({ fullName, studentId, email, password, section }) {
+export async function registerUser({ accountType, fullName, studentId, section, email, password, facultyCode }) {
   const supabase = getSupabase();
   if (!supabase) {
     return { success: false, error: 'Database client is not initialized.' };
   }
 
-  // 1. Client-side Form Validations
+  const isTeacher = accountType === 'teacher';
   const trimmedName = (fullName || '').trim();
   const trimmedId = (studentId || '').trim();
   const trimmedEmail = (email || '').trim().toLowerCase();
   const trimmedSection = (section || '').trim();
+  const trimmedCode = (facultyCode || '').trim();
 
-  if (!trimmedName || trimmedName.length < 2) {
-    return { success: false, error: 'Please provide a valid full name (at least 2 characters).' };
+  if (trimmedName.length < 2) {
+    return { success: false, error: 'Please enter your full name (at least 2 characters).' };
   }
-
-  if (!trimmedId || trimmedId.length < 2) {
-    return { success: false, error: 'Please provide your official college student roll or registration number.' };
+  if (!isTeacher && trimmedId.length < 2) {
+    return { success: false, error: 'Please enter your college roll / registration number.' };
   }
-
-  if (!trimmedSection) {
-    return { success: false, error: 'Please specify your class section (e.g. Section A, Section B).' };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+    return { success: false, error: 'Please enter a valid email address.' };
   }
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(trimmedEmail)) {
-    return { success: false, error: 'Please provide a valid college email address.' };
-  }
-
   if (!password || password.length < 6) {
     return { success: false, error: 'Password must be at least 6 characters long.' };
   }
+  if (isTeacher && !trimmedCode) {
+    return { success: false, error: 'Please enter the faculty sign-up code from your administrator.' };
+  }
 
   try {
-    // 2. Check if the Student ID is already registered in profiles
-    const { data: existingStudent } = await supabase
-      .from('profiles')
-      .select('student_id')
-      .eq('student_id', trimmedId)
-      .maybeSingle();
-
-    if (existingStudent) {
-      return {
-        success: false,
-        error: `Student ID "${trimmedId}" is already registered. Please check your roll number or log in.`
-      };
+    // Pre-checks give clear messages before the account is created
+    if (isTeacher) {
+      const { data: codeOk, error } = await supabase.rpc('verify_faculty_code', { p_code: trimmedCode });
+      if (error) throw error;
+      if (!codeOk) {
+        return { success: false, error: 'That faculty sign-up code is not valid. Check it with your administrator.' };
+      }
+    } else {
+      const { data: idFree, error } = await supabase.rpc('is_student_id_available', { p_student_id: trimmedId });
+      if (error) throw error;
+      if (!idFree) {
+        return { success: false, error: `Roll number "${trimmedId}" is already registered. Sign in instead, or check the number.` };
+      }
     }
 
-    // 3. Register user via Supabase Auth
-    // User metadata stores student identity securely
-    const { data: authData, error: authErr } = await supabase.auth.signUp({
+    const metadata = isTeacher
+      ? { account_type: 'teacher', full_name: trimmedName, faculty_code: trimmedCode }
+      : { account_type: 'student', full_name: trimmedName, student_id: trimmedId, section: trimmedSection };
+
+    const { data, error: authErr } = await supabase.auth.signUp({
       email: trimmedEmail,
-      password: password,
+      password,
       options: {
-        data: {
-          full_name: trimmedName,
-          student_id: trimmedId,
-          section: trimmedSection,
-          role: 'student'
-        }
+        data: metadata,
+        emailRedirectTo: rootUrl('index.html')
       }
     });
 
     if (authErr) {
       if (authErr.message?.toLowerCase().includes('already registered')) {
-        return {
-          success: false,
-          error: 'An account with this email address already exists. Please log in instead.'
-        };
+        return { success: false, error: 'An account with this email already exists. Please sign in instead.' };
       }
-      return { success: false, error: authErr.message };
+      return { success: false, error: friendlyError(authErr) };
     }
 
-    const user = authData?.user;
-    if (!user) {
-      return { success: false, error: 'User creation failed. Please try again.' };
+    // With "Confirm email" enabled in Supabase, no session is returned until the link is clicked
+    if (!data?.session) {
+      return { success: true, needsConfirmation: true };
     }
 
-    // 4. Ensure profile row exists in public.profiles table
-    // (The database trigger handles this automatically, but this upsert ensures section is saved)
-    try {
-      await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id,
-          role: 'student',
-          full_name: trimmedName,
-          student_id: trimmedId,
-          email: trimmedEmail,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'id' });
-    } catch (upsertErr) {
-      console.warn('Profile sync note:', upsertErr);
-    }
-
-    return {
-      success: true,
-      user: user,
-      redirectUrl: 'dashboard.html'
-    };
-
+    const profile = await getUserProfile();
+    return { success: true, needsConfirmation: false, profile, redirectUrl: homeUrlFor(profile) };
   } catch (err) {
     console.error('Registration exception:', err);
-    return { success: false, error: err.message || 'An unexpected error occurred during registration.' };
+    return { success: false, error: friendlyError(err) };
   }
 }
 
 /**
- * Authenticates a user (Student or Admin/Teacher) through Supabase Auth.
+ * Authenticates a user (student or teacher) through Supabase Auth.
  */
 export async function loginUser(email, password) {
   const supabase = getSupabase();
@@ -129,48 +110,38 @@ export async function loginUser(email, password) {
   }
 
   const trimmedEmail = (email || '').trim().toLowerCase();
-
   if (!trimmedEmail || !password) {
     return { success: false, error: 'Please enter both your email address and password.' };
   }
 
   try {
-    const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
-      email: trimmedEmail,
-      password: password
-    });
+    const { data, error } = await supabase.auth.signInWithPassword({ email: trimmedEmail, password });
 
-    if (authErr) {
-      if (authErr.message?.toLowerCase().includes('invalid login credentials')) {
-        return { success: false, error: 'Incorrect email or password. Please verify your credentials.' };
+    if (error) {
+      const msg = error.message?.toLowerCase() || '';
+      if (msg.includes('invalid login credentials')) {
+        return { success: false, error: 'Incorrect email or password.' };
       }
-      return { success: false, error: authErr.message };
+      if (msg.includes('email not confirmed')) {
+        return { success: false, error: 'Please confirm your email first — check your inbox (and spam folder) for the confirmation link.' };
+      }
+      return { success: false, error: friendlyError(error) };
     }
 
-    const user = authData?.user;
-    if (!user) {
+    if (!data?.user) {
       return { success: false, error: 'Login verification failed.' };
     }
 
-    // Retrieve the user profile to determine their role
     const profile = await getUserProfile();
-    const role = profile?.role || user.user_metadata?.role || 'student';
-
-    const isAdmin = (role === 'admin' || role === 'teacher');
-    const redirectUrl = isAdmin ? 'admin/index.html' : 'dashboard.html';
-
     return {
       success: true,
-      user: user,
-      profile: profile,
-      role: role,
-      isAdmin: isAdmin,
-      redirectUrl: redirectUrl
+      profile,
+      isTeacher: isTeacherRole(profile?.role),
+      redirectUrl: homeUrlFor(profile)
     };
-
   } catch (err) {
     console.error('Login exception:', err);
-    return { success: false, error: err.message || 'An unexpected error occurred during login.' };
+    return { success: false, error: friendlyError(err) };
   }
 }
 
@@ -188,19 +159,20 @@ export async function signOut() {
   }
 
   sessionStorage.clear();
-  window.location.href = 'login.html';
+  window.location.href = rootUrl('login.html');
 }
 
 /**
- * Fetch profile of currently authenticated user.
+ * Fetch profile of currently authenticated user (null when signed out).
  */
 export async function getUserProfile() {
   const supabase = getSupabase();
   if (!supabase) return null;
 
   try {
-    const { data: { user }, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !user) return null;
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
+    if (!user) return null;
 
     const { data: profile, error } = await supabase
       .from('profiles')
@@ -212,24 +184,15 @@ export async function getUserProfile() {
       console.warn('Profile fetch note:', error);
     }
 
-    if (!profile) {
-      // Fallback from auth metadata
-      return {
-        id: user.id,
-        email: user.email,
-        full_name: user.user_metadata?.full_name || user.email.split('@')[0],
-        student_id: user.user_metadata?.student_id || 'N/A',
-        section: user.user_metadata?.section || 'N/A',
-        role: user.user_metadata?.role || 'student'
-      };
-    }
-
-    // Merge section from user metadata if table schema doesn't yet have section column
-    if (!profile.section && user.user_metadata?.section) {
-      profile.section = user.user_metadata.section;
-    }
-
-    return profile;
+    // The trigger normally creates the row; fall back to a student view of auth metadata
+    return profile || {
+      id: user.id,
+      email: user.email,
+      full_name: user.user_metadata?.full_name || user.email.split('@')[0],
+      student_id: user.user_metadata?.student_id || null,
+      section: user.user_metadata?.section || null,
+      role: 'student'
+    };
   } catch (err) {
     console.error('Error fetching user profile:', err);
     return null;
@@ -237,34 +200,27 @@ export async function getUserProfile() {
 }
 
 /**
- * Route Guard: Protects student or admin pages.
+ * Route Guard. requiredRole: 'student' | 'teacher' | null (any signed-in user).
+ * Sends users to the login page, or to their own home if the page is for the other role.
  */
 export async function requireAuth(requiredRole = null) {
   const supabase = getSupabase();
-  if (!supabase) return null;
-
-  const { data: { session } } = await supabase.auth.getSession();
-
-  if (!session) {
-    window.location.href = 'login.html';
+  if (!supabase) {
+    document.body.insertAdjacentHTML('afterbegin',
+      '<div class="alert alert-danger" style="margin: 1rem;">Supabase is not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY in js/config.js.</div>');
     return null;
   }
 
   const profile = await getUserProfile();
-
   if (!profile) {
-    window.location.href = 'login.html';
+    window.location.replace(rootUrl('login.html'));
     return null;
   }
 
-  if (requiredRole === 'admin' || requiredRole === 'teacher') {
-    if (profile.role !== 'admin' && profile.role !== 'teacher') {
-      showToast('Access restricted to faculty and administrator accounts only.', 'danger');
-      setTimeout(() => {
-        window.location.href = 'dashboard.html';
-      }, 1200);
-      return null;
-    }
+  const teacher = isTeacherRole(profile.role);
+  if ((requiredRole === 'teacher' && !teacher) || (requiredRole === 'student' && teacher)) {
+    window.location.replace(homeUrlFor(profile));
+    return null;
   }
 
   renderNavbar(profile);
@@ -272,34 +228,55 @@ export async function requireAuth(requiredRole = null) {
 }
 
 /**
- * Dynamically updates the navigation bar with active user information and logout button.
+ * Fills the page's <nav class="navbar-nav"> with role-specific links, the user pill and Sign Out.
  */
 export function renderNavbar(profile) {
-  const navContainer = document.querySelector('.navbar-nav');
-  if (!navContainer) return;
+  const nav = document.querySelector('.navbar-nav');
+  if (!nav) return;
 
-  const isTeacher = profile.role === 'teacher' || profile.role === 'admin';
-  const roleBadge = isTeacher 
-    ? '<span class="badge badge-primary">Instructor / Admin</span>' 
-    : '<span class="badge badge-published">Student</span>';
+  const teacher = isTeacherRole(profile.role);
+  const links = teacher
+    ? [
+        ['admin/index.html', 'Courses'],
+        ['admin/quizzes.html', 'Quizzes'],
+        ['admin/students.html', 'Students'],
+        ['admin/results.html', 'Gradebook']
+      ]
+    : [
+        ['dashboard.html', 'Dashboard'],
+        ['results.html', 'Results'],
+        ['profile.html', 'Profile']
+      ];
 
-  const dashboardLink = isTeacher ? 'admin/index.html' : 'dashboard.html';
-  const historyLink = isTeacher ? '' : '<a href="results.html" class="nav-link">Results</a>';
-  const adminLinks = isTeacher ? '<a href="admin/index.html" class="nav-link">Teacher Console</a>' : '';
+  const here = window.location.pathname;
+  const isActive = (path) => here.endsWith('/' + path) ||
+    (path === 'admin/quizzes.html' && here.endsWith('/admin/create-quiz.html')) ||
+    (path === 'admin/index.html' && here.endsWith('/admin/'));
 
-  navContainer.innerHTML = `
-    <a href="${dashboardLink}" class="nav-link">Dashboard</a>
-    ${historyLink}
-    ${adminLinks}
+  const roleBadge = profile.role === 'admin'
+    ? '<span class="badge badge-primary">Admin</span>'
+    : teacher
+      ? '<span class="badge badge-primary">Teacher</span>'
+      : '<span class="badge badge-published">Student</span>';
+
+  nav.innerHTML = `
+    ${links.map(([path, label]) =>
+      `<a href="${rootUrl(path)}" class="nav-link ${isActive(path) ? 'active' : ''}">${label}</a>`
+    ).join('')}
     <div class="user-pill">
-      <div class="user-avatar">${(profile.full_name || 'U').charAt(0).toUpperCase()}</div>
-      <span style="font-weight: 600;">${profile.full_name || profile.email}</span>
+      <div class="user-avatar">${escapeHtml((profile.full_name || 'U').charAt(0).toUpperCase())}</div>
+      <span class="user-pill-name">${escapeHtml(profile.full_name || profile.email)}</span>
       ${roleBadge}
     </div>
-    <button id="nav-logout-btn" class="btn btn-outline btn-sm" title="Log Out">Sign Out</button>
+    <button type="button" id="nav-logout-btn" class="btn btn-outline btn-sm">Sign Out</button>
   `;
 
   document.getElementById('nav-logout-btn')?.addEventListener('click', signOut);
+
+  const brand = document.querySelector('.navbar-brand');
+  if (brand && brand.tagName === 'A') brand.href = homeUrlFor(profile);
+  const brandText = document.querySelector('.navbar-brand span');
+  if (brandText && !brandText.id) brandText.textContent = APP_CONFIG.APP_NAME;
 }
 
 /**
@@ -313,25 +290,20 @@ export async function sendPasswordResetEmail(email) {
 
   const trimmedEmail = (email || '').trim().toLowerCase();
   if (!trimmedEmail) {
-    return { success: false, error: 'Please enter your registered college email.' };
+    return { success: false, error: 'Please enter your registered email address.' };
   }
 
   try {
-    const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
-    const redirectTo = `${window.location.origin}${basePath}reset-password.html`;
-
-    const { data, error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-      redirectTo: redirectTo
+    const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+      redirectTo: rootUrl('reset-password.html')
     });
-
     if (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: friendlyError(error) };
     }
-
     return { success: true };
   } catch (err) {
     console.error('Password reset request exception:', err);
-    return { success: false, error: err.message || 'An error occurred while requesting password reset.' };
+    return { success: false, error: friendlyError(err) };
   }
 }
 
@@ -349,18 +321,19 @@ export async function updateUserPassword(newPassword) {
   }
 
   try {
-    const { data, error } = await supabase.auth.updateUser({
-      password: newPassword
-    });
-
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) {
       return { success: false, error: error.message };
     }
-
     return { success: true };
   } catch (err) {
     console.error('Password update exception:', err);
-    return { success: false, error: err.message || 'An error occurred while updating password.' };
+    return { success: false, error: friendlyError(err) };
   }
 }
 
+/** Show a short toast and send the user somewhere after a delay. */
+export function toastAndGo(message, url, type = 'success', delay = 600) {
+  showToast(message, type);
+  setTimeout(() => { window.location.href = url; }, delay);
+}

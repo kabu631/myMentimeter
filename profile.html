@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Profile &amp; Semester Report | DailyClassQuiz</title>
+  <meta name="description" content="Your profile and semester quiz marks for every course.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/components.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <header class="app-navbar">
+    <div class="app-container navbar-inner">
+      <a href="dashboard.html" class="navbar-brand">
+        <div class="brand-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+          </svg>
+        </div>
+        <span>DailyClassQuiz</span>
+      </a>
+      <nav class="navbar-nav"></nav>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="app-container">
+
+      <section class="page-header">
+        <div>
+          <div class="page-eyebrow">Student Profile</div>
+          <h1 id="profile-name" class="page-title">My Profile</h1>
+          <p id="profile-meta" class="page-lead"></p>
+        </div>
+        <div class="toolbar no-print">
+          <button id="btn-edit-profile" class="btn btn-secondary">Edit profile</button>
+          <button id="btn-print" class="btn btn-primary">Print / Save as PDF</button>
+        </div>
+      </section>
+
+      <!-- Edit profile & password -->
+      <section id="edit-panel" class="card section-block hidden no-print">
+        <div class="grid-cards" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+          <form id="form-profile">
+            <h3 class="section-title" style="margin-bottom: 1rem;">Profile details</h3>
+            <div class="form-group">
+              <label class="form-label" for="edit-name">Full name</label>
+              <input id="edit-name" class="form-control" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="edit-section">Section</label>
+              <input id="edit-section" class="form-control" placeholder="e.g. A">
+            </div>
+            <p class="small muted">Roll number and email can only be changed by an administrator.</p>
+            <button type="submit" id="btn-save-profile" class="btn btn-primary">Save changes</button>
+          </form>
+          <form id="form-password">
+            <h3 class="section-title" style="margin-bottom: 1rem;">Change password</h3>
+            <div class="form-group">
+              <label class="form-label" for="new-password">New password</label>
+              <input id="new-password" type="password" class="form-control" minlength="6" autocomplete="new-password" placeholder="At least 6 characters">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="confirm-password">Confirm new password</label>
+              <input id="confirm-password" type="password" class="form-control" minlength="6" autocomplete="new-password">
+            </div>
+            <button type="submit" id="btn-save-password" class="btn btn-secondary">Update password</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Overall summary -->
+      <section class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-content">
+            <div id="overall-courses" class="stat-value">–</div>
+            <div class="stat-label">Courses</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-content">
+            <div id="overall-taken" class="stat-value">–</div>
+            <div class="stat-label">Quizzes Taken / Held</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-content">
+            <div id="overall-average" class="stat-value text-primary">–</div>
+            <div class="stat-label">Average Across Courses</div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-head">
+          <h2 class="section-title">Semester Report</h2>
+          <span id="report-date" class="small muted"></span>
+        </div>
+        <div id="report-container">
+          <div class="card muted">Loading your semester report...</div>
+        </div>
+        <p class="small muted">
+          How marks are counted: each quiz counts once you have taken it or once it has closed. A missed quiz scores
+          zero out of its full marks. Open quizzes you haven't taken yet are not counted until they close.
+        </p>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="app-footer">
+    <div class="app-container footer-inner">
+      <div>DailyClassQuiz &copy; 2026</div>
+      <div>Graded securely in the database</div>
+    </div>
+  </footer>
+
+  <script type="module" src="js/profile.js"></script>
+</body>
+</html>

@@ -3,18 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Faculty Semester Results &amp; Gradebook Matrix | Instructor Console</title>
-  <meta name="description" content="Comprehensive semester gradebook matrix for all 35 class quizzes, individual student performance breakdowns, and RFC 4180 CSV exports.">
+  <title>Gradebook | Teacher Console</title>
+  <meta name="description" content="Semester gradebook: every student's quiz marks, totals, weighted final marks and CSV export.">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 
   <link rel="stylesheet" href="../css/main.css">
   <link rel="stylesheet" href="../css/components.css">
+  <link rel="stylesheet" href="../css/quiz.css">
   <link rel="stylesheet" href="../css/admin.css">
 
-  <!-- Supabase Official JS SDK from CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <!-- Header / Navigation -->
   <header class="app-navbar">
     <div class="app-container navbar-inner">
       <a href="index.html" class="navbar-brand">
@@ -24,290 +24,110 @@
             <path d="M6 12v5c3 3 9 3 12 0v-5"/>
           </svg>
         </div>
-        <span>InstructorConsole</span>
+        <span>DailyClassQuiz</span>
       </a>
-      <nav class="navbar-nav">
-        <!-- Dynamically injected by guardAdminPage() in admin-service.js -->
-      </nav>
+      <nav class="navbar-nav"></nav>
     </div>
   </header>
 
   <main class="main-content">
     <div class="app-container">
+      <div id="course-switcher" class="no-print"></div>
 
-      <!-- Academic Course Context Bar -->
-      <div style="margin-bottom: 1.25rem;">
-        <div class="academic-subline">
-          Department of Computer Science &bull; CS-301: Database Management Systems
-        </div>
-      </div>
-
-      <!-- Header Row with CSV Export Actions -->
-      <section class="admin-header-row">
-        <div>
-          <div style="font-size: 0.85rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;">
-            Academic Performance &amp; Evaluation &bull; Spring 2026
+      <div id="page-body" class="hidden">
+        <section class="page-header">
+          <div>
+            <div class="page-eyebrow">Semester Gradebook</div>
+            <h1 id="course-title" class="page-title">Gradebook</h1>
+            <p id="course-subtitle" class="page-lead"></p>
           </div>
-          <h1 style="font-size: 2.25rem; margin-bottom: 0.25rem;">Teacher's Semester Results Dashboard</h1>
-          <p style="margin: 0; color: var(--text-muted);">
-            Complete 35-class quiz performance matrix, individual student review breakdowns, and official CSV gradebooks.
+          <div class="toolbar no-print">
+            <button id="btn-export-gradebook" class="btn btn-primary">Export gradebook (CSV)</button>
+          </div>
+        </section>
+
+        <section class="stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));">
+          <div class="stat-card"><div class="stat-content"><div id="metric-students" class="stat-value">–</div><div class="stat-label">Students</div></div></div>
+          <div class="stat-card"><div class="stat-content"><div id="metric-quizzes" class="stat-value">–</div><div class="stat-label">Quizzes Held</div></div></div>
+          <div class="stat-card"><div class="stat-content"><div id="metric-avg" class="stat-value text-primary">–</div><div class="stat-label">Class Average</div></div></div>
+          <div class="stat-card"><div class="stat-content"><div id="metric-participation" class="stat-value text-success">–</div><div class="stat-label">Participation</div></div></div>
+        </section>
+
+        <div class="admin-nav-tabs no-print">
+          <button id="tab-btn-matrix" class="admin-tab-btn active">Class gradebook</button>
+          <button id="tab-btn-individual" class="admin-tab-btn">Individual student</button>
+        </div>
+
+        <!-- Class matrix -->
+        <section id="view-matrix-pane">
+          <div class="section-head no-print">
+            <div class="toolbar">
+              <input type="search" id="filter-student" class="form-control" placeholder="Search name or roll no..." style="width: 240px; padding: 0.55rem 0.85rem;">
+              <select id="filter-section" class="form-select" style="width: 180px; padding: 0.55rem 0.85rem;">
+                <option value="all">All sections</option>
+              </select>
+            </div>
+            <div class="small muted toolbar" style="gap: 0.75rem;">
+              <span><span class="score-pill score-high">8</span> ≥ 80%</span>
+              <span><span class="score-pill score-mid">6</span> 50–79%</span>
+              <span><span class="score-pill score-low">3</span> &lt; 50%</span>
+              <span><span class="score-pill score-missed">0</span> missed</span>
+              <span><span class="score-pill score-none">·</span> open</span>
+            </div>
+          </div>
+
+          <div class="matrix-wrapper">
+            <div id="matrix-scroll-wrapper" class="matrix-scroll-container">
+              <table class="matrix-table">
+                <thead><tr id="matrix-table-head-row"></tr></thead>
+                <tbody id="matrix-table-body">
+                  <tr><td class="muted" style="padding: 2rem;">Loading gradebook...</td></tr>
+                </tbody>
+                <tfoot><tr id="matrix-table-foot-row"></tr></tfoot>
+              </table>
+            </div>
+          </div>
+          <p class="small muted">
+            Totals count every quiz a student took plus every closed quiz they missed (scored 0). Open quizzes a student
+            hasn't taken yet aren't counted until they close. Click a name for the full breakdown.
           </p>
-        </div>
+        </section>
 
-        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-          <button id="btn-export-filtered" class="btn btn-secondary">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="16" y1="13" x2="8" y2="13"/>
-              <line x1="16" y1="17" x2="8" y2="17"/>
-            </svg>
-            Export Filtered View (CSV)
-          </button>
-          <button id="btn-export-semester" class="btn btn-primary">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            Export Full Semester Matrix (CSV)
-          </button>
-        </div>
-      </section>
-
-      <!-- KPI Overview Cards -->
-      <section style="margin-bottom: 2rem;">
-        <div class="stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));">
-          
-          <div class="stat-card">
-            <div class="stat-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-              </svg>
-            </div>
-            <div class="stat-content">
-              <div id="metric-total-students" class="stat-value">0</div>
-              <div class="stat-label">Enrolled Students</div>
-            </div>
+        <!-- Individual student -->
+        <section id="view-individual-pane" class="hidden">
+          <div class="section-head no-print">
+            <button id="btn-back-to-matrix" class="btn btn-outline btn-sm">&larr; Back to class gradebook</button>
+            <select id="individual-student-select" class="form-select" style="max-width: 420px; padding: 0.55rem 0.85rem;"></select>
           </div>
-
-          <div class="stat-card">
-            <div class="stat-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-              </svg>
-            </div>
-            <div class="stat-content">
-              <div id="metric-total-quizzes" class="stat-value">0 / 35</div>
-              <div class="stat-label">Quizzes Held / Classes</div>
-            </div>
-          </div>
-
-          <div class="stat-card">
-            <div class="stat-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
-              </svg>
-            </div>
-            <div class="stat-content">
-              <div id="metric-class-avg" class="stat-value" style="color: var(--primary);">0.0%</div>
-              <div class="stat-label">Class Average Accuracy</div>
-            </div>
-          </div>
-
-          <div class="stat-card">
-            <div class="stat-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-              </svg>
-            </div>
-            <div class="stat-content">
-              <div id="metric-total-attempts" class="stat-value" style="color: var(--success);">0</div>
-              <div class="stat-label">Total Submissions Evaluated</div>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      <!-- View Selector Tabs -->
-      <section style="margin-bottom: 1.5rem;">
-        <div class="admin-nav-tabs" style="margin-bottom: 0;">
-          <button id="tab-btn-matrix" class="admin-tab-btn active">
-            Complete Class Result View (Q01 – Q35 Matrix)
-          </button>
-          <button id="tab-btn-individual" class="admin-tab-btn">
-            Individual Student Result View
-          </button>
-        </div>
-      </section>
-
-      <!-- Multi-Filter Toolbar (Section, Student, Quiz, Date) -->
-      <section class="card" style="padding: 1.25rem 1.5rem; margin-bottom: 1.75rem;">
-        <div style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem;">
-          Filter Class Records
-        </div>
-
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; align-items: flex-end;">
-          
-          <!-- 1. Section Filter -->
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label" style="font-size: 0.85rem;">Section</label>
-            <select id="filter-section" class="form-select">
-              <option value="all">All Sections</option>
-            </select>
-          </div>
-
-          <!-- 2. Student Search -->
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label" style="font-size: 0.85rem;">Student Name or ID</label>
-            <input type="text" id="filter-student" class="form-control" placeholder="Search by name, roll no...">
-          </div>
-
-          <!-- 3. Quiz Filter -->
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label" style="font-size: 0.85rem;">Quiz / Session</label>
-            <select id="filter-quiz" class="form-select">
-              <option value="all">All Quizzes (Q01 – Q35)</option>
-            </select>
-          </div>
-
-          <!-- 4. Date Filter -->
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label" style="font-size: 0.85rem;">Scheduled Date</label>
-            <div style="display: flex; gap: 0.5rem;">
-              <input type="date" id="filter-date" class="form-control">
-              <button id="btn-clear-date" class="btn btn-outline btn-sm" title="Clear Date Filter" type="button" style="display: flex; align-items: center; justify-content: center; width: 42px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
-            </div>
-          </div>
-
-          <!-- Reset Filter Button -->
-          <div style="display: flex; align-items: flex-end;">
-            <button id="btn-reset-filters" class="btn btn-outline" style="width: 100%; height: 42px;">
-              Reset Filters
-            </button>
-          </div>
-
-        </div>
-      </section>
-
-      <!-- ================================================================== -->
-      <!-- VIEW 1: COMPLETE CLASS RESULT MATRIX                               -->
-      <!-- ================================================================== -->
-      <section id="view-matrix-pane">
-        
-        <!-- Horizontal Scroll Helper Bar -->
-        <div class="matrix-summary-bar">
-          <div class="scroll-hint-pill">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="17 11 21 7 17 3"/><line x1="21" y1="7" x2="9" y2="7"/>
-              <polyline points="7 21 3 17 7 13"/><line x1="3" y1="17" x2="15" y2="17"/>
-            </svg>
-            <span>Tip: Scroll horizontally across table to view all 35 class quizzes (Q01 – Q35).</span>
-          </div>
-
-          <div class="scroll-hint-pill">
-            <span style="margin-right: 0.25rem;">Quick Jump:</span>
-            <button id="btn-scroll-start" type="button">&larr; Start (Q01)</button>
-            <button id="btn-scroll-mid" type="button">Mid (Q18)</button>
-            <button id="btn-scroll-end" type="button">Totals &rarr;</button>
-          </div>
-        </div>
-
-        <!-- Matrix Table Container -->
-        <div class="matrix-wrapper">
-          <div id="matrix-scroll-wrapper" class="matrix-scroll-container">
-            <table class="matrix-table">
-              <thead>
-                <tr id="matrix-table-head-row">
-                  <!-- Injected dynamically by admin-results.js:
-                       Student ID | Student Name | Section | Q01 | Q02 | ... | Q35 | Total Earned | Total Possible | Percentage | Action -->
-                </tr>
-              </thead>
-              <tbody id="matrix-table-body">
-                <tr>
-                  <td colspan="43" style="text-align: center; padding: 3rem; color: var(--text-muted);">
-                    Loading semester quiz matrix...
-                  </td>
-                </tr>
-              </tbody>
-              <tfoot>
-                <tr id="matrix-table-foot-row">
-                  <!-- Class average summary row injected dynamically -->
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
-
-      </section>
-
-      <!-- ================================================================== -->
-      <!-- VIEW 2: INDIVIDUAL STUDENT RESULT VIEW                             -->
-      <!-- ================================================================== -->
-      <section id="view-individual-pane" style="display: none;">
-        
-        <!-- Top Toolbar with Student Selector & Back Button -->
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
-          <button id="btn-back-to-matrix" class="btn btn-outline">
-            &larr; Return to Class Matrix
-          </button>
-
-          <div style="display: flex; align-items: center; gap: 0.75rem; min-width: 320px;">
-            <label style="font-weight: 600; font-size: 0.9rem; color: var(--text-secondary); white-space: nowrap;">
-              Switch Student:
-            </label>
-            <select id="individual-student-select" class="form-select" style="flex: 1;">
-              <!-- Populated dynamically -->
-            </select>
-          </div>
-        </div>
-
-        <!-- Student Dynamic Report Content -->
-        <div id="student-individual-content">
-          <!-- Injected dynamically by renderIndividualStudentView() -->
-        </div>
-
-      </section>
-
+          <div id="student-individual-content"></div>
+        </section>
+      </div>
     </div>
   </main>
 
-  <!-- ==================================================================== -->
-  <!-- QUESTION-BY-QUESTION INSPECTOR MODAL                                 -->
-  <!-- ==================================================================== -->
-  <div id="quiz-answer-inspector-modal" class="modal-backdrop">
-    <div class="modal-dialog" style="max-width: 780px;">
+  <div id="answer-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="answer-modal-title">
+    <div class="modal-dialog" style="max-width: 760px;">
       <div class="modal-header">
         <div>
-          <h3 id="inspector-modal-title" class="modal-title">Student Attempt Breakdown</h3>
-          <span id="inspector-score-badge" class="badge badge-published" style="margin-top: 0.35rem; font-size: 0.85rem;">
-            Score: -- / --
-          </span>
+          <h3 id="answer-modal-title" class="modal-title">Attempt</h3>
+          <span id="answer-modal-badge" class="badge badge-published" style="margin-top: 0.35rem;"></span>
         </div>
-        <button id="btn-close-answer-modal" style="background: none; border: none; font-size: 1.75rem; color: var(--text-muted); cursor: pointer; line-height: 1;">&times;</button>
+        <button class="modal-close" data-close aria-label="Close">&times;</button>
       </div>
-
-      <div id="inspector-modal-body" class="modal-body" style="max-height: 65vh; overflow-y: auto;">
-        Loading questions and answers...
-      </div>
-
+      <div id="answer-modal-body" class="modal-body"></div>
       <div class="modal-footer">
-        <button id="btn-modal-answer-done" class="btn btn-primary">Done &larr; Return to Dashboard</button>
+        <button class="btn btn-primary" data-close>Done</button>
       </div>
     </div>
   </div>
 
   <footer class="app-footer">
     <div class="app-container footer-inner">
-      <div>Daily Quiz System &copy; 2026. Faculty Administration Console.</div>
-      <div>Academic Evaluation Portal</div>
+      <div>DailyClassQuiz &copy; 2026 &bull; Teacher Console</div>
+      <div>Graded securely in the database</div>
     </div>
   </footer>
 
-  <script type="module">
-    import { initAdminResultsDashboard } from '../js/admin-results.js';
-    document.addEventListener('DOMContentLoaded', initAdminResultsDashboard);
-  </script>
+  <script type="module" src="../js/admin-results.js"></script>
 </body>
 </html>

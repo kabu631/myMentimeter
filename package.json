@@ -1,7 +1,7 @@
 {
   "name": "daily-college-quiz-system",
   "version": "1.0.0",
-  "description": "Daily Class Quiz System for College CS Courses",
+  "description": "Free multi-teacher, multi-course daily class quiz portal (GitHub Pages + Supabase)",
   "scripts": {
     "start": "node server.js",
     "serve": "node server.js"

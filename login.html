@@ -3,21 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login | Daily College Quiz System</title>
-  <meta name="description" content="Sign in to your college daily quiz account. Access daily lecture quizzes, track your semester attendance, and view scores.">
+  <title>Sign In | DailyClassQuiz</title>
+  <meta name="description" content="Sign in to take your daily class quizzes or manage your courses.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
 
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/auth.css">
 
-  <!-- Supabase Official JS SDK from CDN (Safe for static GitHub Pages) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <!-- Header / Navigation -->
   <header class="app-navbar">
     <div class="app-container navbar-inner">
-      <div class="navbar-brand">
+      <a href="index.html" class="navbar-brand">
         <div class="brand-icon">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
@@ -25,9 +24,9 @@
           </svg>
         </div>
         <span>DailyClassQuiz</span>
-      </div>
+      </a>
       <div class="navbar-nav">
-        <a href="register.html" class="nav-link">Student Register</a>
+        <a href="register.html" class="nav-link">Create Account</a>
       </div>
     </div>
   </header>
@@ -35,7 +34,7 @@
   <main class="main-content">
     <div class="auth-wrapper">
       <div class="auth-card">
-        
+
         <div class="auth-header">
           <div class="auth-logo">
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -43,100 +42,62 @@
               <path d="M6 12v5c3 3 9 3 12 0v-5"/>
             </svg>
           </div>
-          <div style="font-size: 0.78rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.35rem;">
-            Department of Computer Science &bull; CS-301
-          </div>
-          <h1 class="auth-title">College Quiz Portal</h1>
-          <p class="auth-subtitle">Student &amp; Faculty Access</p>
+          <div id="institution-name" class="page-eyebrow"></div>
+          <h1 class="auth-title">Welcome back</h1>
+          <p class="auth-subtitle">Students and teachers sign in here</p>
         </div>
 
-        <!-- Alert Notification Box -->
         <div id="login-alert" class="alert alert-danger" style="display: none;" role="alert"></div>
 
-        <div class="alert alert-info" style="font-size: 0.82rem; margin-bottom: 1.25rem; display: flex; align-items: flex-start; gap: 0.5rem; text-align: left; line-height: 1.45;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-          <span>Faculty accounts are automatically recognized and routed to the <strong>Teacher Command Center</strong> to manage questions and evaluate gradebooks.</span>
-        </div>
-
-        <!-- Login Form -->
         <form id="form-login" novalidate>
           <div class="form-group">
-            <label class="form-label" for="login-email">College Email Address</label>
-            <input 
-              type="email" 
-              id="login-email" 
-              class="form-control" 
-              placeholder="e.g. your.email@college.edu" 
-              required 
-              autocomplete="email"
-            >
+            <label class="form-label" for="login-email">Email Address</label>
+            <input type="email" id="login-email" class="form-control" placeholder="you@college.edu" required autocomplete="email">
           </div>
 
           <div class="form-group">
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <label class="form-label" for="login-password">Password</label>
-              <button type="button" id="toggle-password-btn" style="background: none; border: none; color: var(--primary); font-size: 0.8rem; cursor: pointer; padding: 0;">
-                Show
-              </button>
+              <button type="button" id="toggle-password-btn" class="link-button">Show</button>
             </div>
-            <input 
-              type="password" 
-              id="login-password" 
-              class="form-control" 
-              placeholder="••••••••" 
-              required 
-              autocomplete="current-password"
-            >
+            <input type="password" id="login-password" class="form-control" placeholder="••••••••" required autocomplete="current-password">
             <div style="display: flex; justify-content: flex-end; margin-top: 0.4rem;">
-              <button type="button" id="btn-open-forgot" style="background: none; border: none; color: var(--primary); font-size: 0.8rem; cursor: pointer; padding: 0; text-decoration: underline;">
-                Forgot Password?
-              </button>
+              <button type="button" id="btn-open-forgot" class="link-button">Forgot password?</button>
             </div>
           </div>
 
-          <button type="submit" id="btn-submit-login" class="btn btn-primary btn-block btn-lg" style="margin-top: 1.5rem;">
-            <span>Sign In &rarr;</span>
+          <button type="submit" id="btn-submit-login" class="btn btn-primary btn-block btn-lg" style="margin-top: 1rem;">
+            Sign In &rarr;
           </button>
         </form>
 
-        <div class="auth-divider">New Student?</div>
+        <div class="auth-divider">New here?</div>
 
-        <div style="text-align: center;">
-          <a href="register.html" class="btn btn-secondary btn-block">
-            Register New Student Account
-          </a>
-        </div>
-
+        <a href="register.html" class="btn btn-secondary btn-block">Create a student or teacher account</a>
       </div>
     </div>
   </main>
 
   <!-- Forgot Password Modal -->
-  <div id="modal-forgot" class="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center; padding: 1rem;">
-    <div class="modal-card" style="background: #ffffff; border-radius: var(--radius-lg, 12px); border: 1px solid var(--border-color, #e2e8f0); max-width: 440px; width: 100%; padding: 1.75rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);">
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+  <div id="modal-forgot" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="forgot-title">
+    <div class="modal-dialog" style="max-width: 440px;">
+      <div class="modal-header">
         <div>
-          <h3 style="font-size: 1.15rem; font-weight: 700; color: #0f172a; margin: 0 0 0.25rem 0;">Reset Password</h3>
-          <p style="font-size: 0.85rem; color: #64748b; margin: 0;">Enter your college email address to receive a secure password recovery link.</p>
+          <h3 id="forgot-title" class="modal-title">Reset Password</h3>
+          <p class="small muted" style="margin: 0.25rem 0 0;">We'll email you a secure link to choose a new password.</p>
         </div>
-        <button type="button" id="btn-close-forgot" style="background: none; border: none; color: #94a3b8; font-size: 1.5rem; line-height: 1; cursor: pointer; padding: 0;" aria-label="Close">&times;</button>
+        <button type="button" id="btn-close-forgot" class="modal-close" aria-label="Close">&times;</button>
       </div>
-
-      <div id="forgot-alert" class="alert" style="display: none; font-size: 0.85rem; margin-bottom: 1rem;"></div>
-
       <form id="form-forgot">
-        <div class="form-group" style="margin-bottom: 1.25rem;">
-          <label class="form-label" for="forgot-email">College Email Address</label>
-          <input 
-            type="email" 
-            id="forgot-email" 
-            class="form-control" 
-            placeholder="e.g. your.email@college.edu" 
-            required 
-            autocomplete="email"
-          >
+        <div class="modal-body">
+          <div id="forgot-alert" class="alert" style="display: none;"></div>
+          <div class="form-group" style="margin-bottom: 0.5rem;">
+            <label class="form-label" for="forgot-email">Email Address</label>
+            <input type="email" id="forgot-email" class="form-control" placeholder="you@college.edu" required autocomplete="email">
+          </div>
+          <p class="small muted" style="margin: 0;">No email arriving? Your teacher or administrator can set a temporary password for you.</p>
         </div>
-        <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+        <div class="modal-footer">
           <button type="button" id="btn-cancel-forgot" class="btn btn-outline">Cancel</button>
           <button type="submit" id="btn-submit-forgot" class="btn btn-primary">Send Reset Link</button>
         </div>
@@ -146,123 +107,88 @@
 
   <footer class="app-footer">
     <div class="app-container footer-inner">
-      <div>Daily Quiz System &copy; 2026. Department of Computer Science.</div>
-      <div>Academic Evaluation Portal</div>
+      <div>DailyClassQuiz &copy; 2026</div>
+      <div>Graded securely in the database</div>
     </div>
   </footer>
 
   <script type="module">
-    import { loginUser, getUserProfile, sendPasswordResetEmail } from './js/auth.js';
+    import { loginUser, getUserProfile, homeUrlFor, sendPasswordResetEmail } from './js/auth.js';
     import { showToast } from './js/supabase.js';
+    import { APP_CONFIG } from './js/config.js';
+    import { setBusy } from './js/utils.js';
 
-    // If user is already logged in, redirect automatically based on role
-    async function checkExistingSession() {
-      const profile = await getUserProfile();
-      if (profile) {
-        const isAdmin = (profile.role === 'admin' || profile.role === 'teacher');
-        window.location.href = isAdmin ? 'admin/index.html' : 'dashboard.html';
-      }
-    }
-    checkExistingSession();
+    document.getElementById('institution-name').textContent = APP_CONFIG.INSTITUTION_NAME;
 
-    // Password visibility toggle
+    // Already signed in? Go straight to the right home page
+    getUserProfile().then(profile => {
+      if (profile) window.location.replace(homeUrlFor(profile));
+    });
+
     const passwordInput = document.getElementById('login-password');
     const toggleBtn = document.getElementById('toggle-password-btn');
     toggleBtn.addEventListener('click', () => {
-      const isPassword = passwordInput.type === 'password';
-      passwordInput.type = isPassword ? 'text' : 'password';
-      toggleBtn.textContent = isPassword ? 'Hide' : 'Show';
+      const show = passwordInput.type === 'password';
+      passwordInput.type = show ? 'text' : 'password';
+      toggleBtn.textContent = show ? 'Hide' : 'Show';
     });
 
-    // Forgot Password Modal
+    // Forgot password modal
     const modalForgot = document.getElementById('modal-forgot');
-    const btnOpenForgot = document.getElementById('btn-open-forgot');
-    const btnCloseForgot = document.getElementById('btn-close-forgot');
-    const btnCancelForgot = document.getElementById('btn-cancel-forgot');
-    const formForgot = document.getElementById('form-forgot');
     const forgotAlert = document.getElementById('forgot-alert');
-    const btnSubmitForgot = document.getElementById('btn-submit-forgot');
-
-    const openForgotModal = () => {
+    const openForgot = () => {
       forgotAlert.style.display = 'none';
-      const currentEmail = document.getElementById('login-email').value;
-      if (currentEmail) {
-        document.getElementById('forgot-email').value = currentEmail;
-      }
-      modalForgot.style.display = 'flex';
+      document.getElementById('forgot-email').value = document.getElementById('login-email').value;
+      modalForgot.classList.add('active');
+      document.getElementById('forgot-email').focus();
     };
+    const closeForgot = () => modalForgot.classList.remove('active');
 
-    const closeForgotModal = () => {
-      modalForgot.style.display = 'none';
-    };
+    document.getElementById('btn-open-forgot').addEventListener('click', openForgot);
+    document.getElementById('btn-close-forgot').addEventListener('click', closeForgot);
+    document.getElementById('btn-cancel-forgot').addEventListener('click', closeForgot);
+    modalForgot.addEventListener('click', (e) => { if (e.target === modalForgot) closeForgot(); });
 
-    btnOpenForgot.addEventListener('click', openForgotModal);
-    btnCloseForgot.addEventListener('click', closeForgotModal);
-    btnCancelForgot.addEventListener('click', closeForgotModal);
-
-    modalForgot.addEventListener('click', (e) => {
-      if (e.target === modalForgot) closeForgotModal();
-    });
-
-    formForgot.addEventListener('submit', async (e) => {
+    document.getElementById('form-forgot').addEventListener('submit', async (e) => {
       e.preventDefault();
-      forgotAlert.style.display = 'none';
+      const btn = document.getElementById('btn-submit-forgot');
       const email = document.getElementById('forgot-email').value.trim();
+      forgotAlert.style.display = 'none';
 
-      btnSubmitForgot.disabled = true;
-      btnSubmitForgot.textContent = 'Sending Link...';
-
+      setBusy(btn, true, 'Sending...');
       const res = await sendPasswordResetEmail(email);
+      setBusy(btn, false);
 
-      btnSubmitForgot.disabled = false;
-      btnSubmitForgot.textContent = 'Send Reset Link';
-
+      forgotAlert.style.display = 'block';
       if (!res.success) {
         forgotAlert.className = 'alert alert-danger';
         forgotAlert.textContent = res.error;
-        forgotAlert.style.display = 'block';
       } else {
         forgotAlert.className = 'alert alert-success';
-        forgotAlert.textContent = `Password recovery link dispatched to ${email}. Please check your inbox (and spam folder) to reset your password.`;
-        forgotAlert.style.display = 'block';
-        showToast('Password reset email sent!', 'success');
-        setTimeout(() => {
-          closeForgotModal();
-        }, 3500);
+        forgotAlert.textContent = `If an account exists for ${email}, a reset link is on its way. Check your inbox and spam folder.`;
+        showToast('Password reset email sent.', 'success');
       }
     });
 
-    // Form submission
-    const form = document.getElementById('form-login');
+    // Sign in
     const alertBox = document.getElementById('login-alert');
-    const submitBtn = document.getElementById('btn-submit-login');
-
-    form.addEventListener('submit', async (e) => {
+    document.getElementById('form-login').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const submitBtn = document.getElementById('btn-submit-login');
       alertBox.style.display = 'none';
 
-      const email = document.getElementById('login-email').value;
-      const password = document.getElementById('login-password').value;
-
-      // Loading state
-      submitBtn.disabled = true;
-      submitBtn.innerHTML = '<span>Verifying Credentials...</span>';
-
-      const result = await loginUser(email, password);
+      setBusy(submitBtn, true, 'Signing in...');
+      const result = await loginUser(document.getElementById('login-email').value, passwordInput.value);
 
       if (!result.success) {
         alertBox.textContent = result.error;
         alertBox.style.display = 'block';
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '<span>Sign In &rarr;</span>';
-      } else {
-        const roleGreeting = result.isAdmin ? 'Welcome, Faculty / Admin!' : 'Signed in successfully!';
-        showToast(roleGreeting, 'success');
-
-        setTimeout(() => {
-          window.location.href = result.redirectUrl || 'dashboard.html';
-        }, 500);
+        setBusy(submitBtn, false);
+        return;
       }
+
+      showToast(result.isTeacher ? 'Welcome back, teacher!' : 'Signed in successfully!', 'success');
+      setTimeout(() => { window.location.href = result.redirectUrl; }, 400);
     });
   </script>
 </body>

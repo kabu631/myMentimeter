@@ -3,17 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Student Dashboard | Daily College Quiz System</title>
-  <meta name="description" content="College daily class quiz dashboard for students. View today's published quiz, check attempt status, accumulated scores, and recent performance.">
+  <title>Dashboard | DailyClassQuiz</title>
+  <meta name="description" content="Your open class quizzes, courses and semester progress.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
 
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/components.css">
 
-  <!-- Supabase Official JS SDK from CDN (Safe for static GitHub Pages) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <!-- Header / Navigation -->
   <header class="app-navbar">
     <div class="app-container navbar-inner">
       <a href="dashboard.html" class="navbar-brand">
@@ -25,172 +24,88 @@
         </div>
         <span>DailyClassQuiz</span>
       </a>
-      <nav class="navbar-nav">
-        <!-- User identity and logout button dynamically injected by auth.js -->
-        <a href="dashboard.html" class="nav-link active">Dashboard</a>
-        <a href="results.html" class="nav-link">Results</a>
-        <button id="btn-student-logout" class="btn btn-outline btn-sm">Sign Out</button>
-      </nav>
+      <nav class="navbar-nav"></nav>
     </div>
   </header>
 
   <main class="main-content">
     <div class="app-container">
 
-      <!-- Academic Course Context Bar -->
-      <div style="margin-bottom: 1.25rem;">
-        <div class="academic-subline">
-          Department of Computer Science &bull; CS-301: Database Management Systems
+      <section class="page-header">
+        <div>
+          <div class="page-eyebrow">Student Dashboard</div>
+          <h1 class="page-title">Welcome, <span id="student-name">Student</span>!</h1>
+          <p id="student-meta" class="page-lead"></p>
         </div>
-      </div>
+      </section>
 
-      <!-- 1. STUDENT IDENTITY BANNER -->
-      <section style="margin-bottom: 1.75rem;">
-        <div class="card" style="background: radial-gradient(circle at top left, rgba(79, 70, 229, 0.08), var(--bg-card)); padding: 1.75rem 2rem; border-color: rgba(79, 70, 229, 0.2);">
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1.5rem;">
-            <div>
-              <div style="font-size: 0.8rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.35rem;">
-                Enrolled Student Portal &bull; Spring 2026
-              </div>
-              <h1 style="font-size: 2.25rem; margin-bottom: 0.35rem; line-height: 1.2;">
-                Welcome, <span id="student-name" style="color: var(--text-primary);">Student</span>!
-              </h1>
-              <div style="display: flex; gap: 1.5rem; flex-wrap: wrap; font-size: 0.95rem; color: var(--text-secondary); margin-top: 0.5rem;">
-                <span>Roll No: <strong id="student-id" style="color: var(--text-primary);">--</strong></span>
-                <span>Section: <strong id="student-section" style="color: var(--text-primary);">--</strong></span>
-                <span id="student-email" style="color: var(--text-muted);"></span>
-              </div>
-            </div>
-
-            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem;">
-              <span class="badge badge-published" style="font-size: 0.85rem; padding: 0.4rem 0.85rem;">
-                Enrolled &amp; Active
-              </span>
-              <span style="font-size: 0.8rem; color: var(--text-muted);">Daily Lecture Attendance &amp; Quizzes</span>
-            </div>
+      <section class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-icon" data-icon="book"></div>
+          <div class="stat-content">
+            <div id="stat-courses" class="stat-value">–</div>
+            <div class="stat-label">Courses Enrolled</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" data-icon="target"></div>
+          <div class="stat-content">
+            <div id="stat-taken" class="stat-value">–</div>
+            <div class="stat-label">Quizzes Taken / Held</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" data-icon="trophy"></div>
+          <div class="stat-content">
+            <div id="stat-average" class="stat-value">–</div>
+            <div class="stat-label">Average Across Courses</div>
           </div>
         </div>
       </section>
 
-      <!-- FIRST-TIME USER HELPER CARD -->
-      <section style="margin-bottom: 2rem;">
-        <div class="card" style="background: var(--bg-card); border: 1px dashed var(--border-color); padding: 1rem 1.5rem;">
-          <div style="display: flex; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
-            <div class="stat-icon" style="width: 36px; height: 36px; border-radius: var(--radius-sm);">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
-              </svg>
-            </div>
-            <div style="flex: 1; min-width: 260px;">
-              <div style="font-size: 0.875rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">
-                First-time Student Guide:
-              </div>
-              <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;">
-                1. Check <strong>Today's Class Quiz</strong> below during or after your daily lecture &bull; 
-                2. You have <strong>one attempt</strong> to submit your answers &bull; 
-                3. Quizzes are automatically graded by the database and added to your cumulative semester score.
-              </p>
-            </div>
-          </div>
+      <section class="section-block">
+        <div class="section-head">
+          <h2 class="section-title">Open Quizzes</h2>
+          <span class="small muted">One attempt per quiz · graded instantly</span>
+        </div>
+        <div id="open-quizzes" class="stack">
+          <div class="card muted">Loading your quizzes...</div>
         </div>
       </section>
 
-      <!-- 2. CUMULATIVE METRICS STATS GRID -->
-      <section style="margin-bottom: 2.5rem;">
-        <div class="stat-grid">
-          
-          <!-- Total Accumulated Quiz Marks / Total Possible -->
-          <div class="stat-card">
-            <div class="stat-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
-                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
-                <path d="M4 22h16"/>
-                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
-                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
-                <path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/>
-              </svg>
-            </div>
-            <div class="stat-content">
-              <div id="stat-total-score" class="stat-value">0.0 / 0.0</div>
-              <div class="stat-label">Total Marks (Accumulated / Possible)</div>
-            </div>
-          </div>
-
-          <!-- Quizzes Attempted vs Available -->
-          <div class="stat-card">
-            <div class="stat-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-              </svg>
-            </div>
-            <div class="stat-content">
-              <div id="stat-attempts-count" class="stat-value">0 / 0</div>
-              <div class="stat-label">Quizzes Attempted / Available</div>
-            </div>
-          </div>
-
-          <!-- Overall Accuracy Percentage -->
-          <div class="stat-card">
-            <div class="stat-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
-              </svg>
-            </div>
-            <div class="stat-content">
-              <div id="stat-accuracy-rate" class="stat-value">0.0%</div>
-              <div class="stat-label">Average Score Rate</div>
-            </div>
-          </div>
-
+      <section class="section-block">
+        <div class="section-head">
+          <h2 class="section-title">My Courses</h2>
+          <form id="join-form" class="toolbar" autocomplete="off">
+            <label for="join-code" class="sr-only">Course code</label>
+            <input type="text" id="join-code" class="form-control mono" placeholder="Course code" maxlength="12"
+              style="width: 170px; text-transform: uppercase; letter-spacing: 0.1em; padding: 0.55rem 0.85rem;">
+            <button type="submit" id="btn-join" class="btn btn-primary btn-sm">Join Course</button>
+          </form>
+        </div>
+        <div id="courses-grid" class="grid-cards">
+          <div class="card muted">Loading courses...</div>
         </div>
       </section>
 
-      <!-- 3. TODAY'S CURRENTLY PUBLISHED QUIZ (Hero Section) -->
-      <section style="margin-bottom: 2.5rem;">
-        <div class="card-header" style="border: none; padding: 0; margin-bottom: 1rem;">
-          <h2 class="card-title">Today's Class Quiz</h2>
-          <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">Daily Lecture Evaluation</span>
+      <section class="section-block">
+        <div class="section-head">
+          <h2 class="section-title">Recent Results</h2>
+          <a href="results.html" class="btn btn-outline btn-sm">All results &rarr;</a>
         </div>
-
-        <!-- Injected dynamically by js/dashboard.js -->
-        <div id="today-quiz-card-container">
-          <div class="card" style="text-align: center; padding: 2.5rem 1.5rem;">
-            <div class="empty-icon" style="margin: 0 auto 0.75rem;">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-              </svg>
-            </div>
-            <p style="margin: 0; color: var(--text-muted);">Checking for today's active quiz...</p>
-          </div>
-        </div>
-      </section>
-
-      <!-- 4. RECENT QUIZ RESULTS TABLE -->
-      <section>
-        <div class="card-header" style="border: none; padding: 0; margin-bottom: 1rem;">
-          <h2 class="card-title">Recent Quiz Results</h2>
-          <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">Your Submission History</span>
-        </div>
-
         <div class="table-container">
           <table class="data-table">
             <thead>
               <tr>
-                <th>Class</th>
-                <th>Quiz Topic</th>
-                <th>Date</th>
+                <th>Course</th>
+                <th>Quiz</th>
+                <th class="hide-sm">Submitted</th>
                 <th>Score</th>
-                <th>Status</th>
+                <th></th>
               </tr>
             </thead>
             <tbody id="recent-results-body">
-              <tr>
-                <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-muted);">
-                  Loading recent quiz attempts...
-                </td>
-              </tr>
+              <tr><td colspan="5" class="muted" style="text-align: center; padding: 2rem;">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -201,8 +116,8 @@
 
   <footer class="app-footer">
     <div class="app-container footer-inner">
-      <div>Daily Quiz System &copy; 2026. Department of Computer Science.</div>
-      <div>Academic Evaluation Portal</div>
+      <div>DailyClassQuiz &copy; 2026</div>
+      <div>Graded securely in the database</div>
     </div>
   </footer>
 

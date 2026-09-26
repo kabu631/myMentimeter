@@ -2,358 +2,224 @@
  * ==============================================================================
  * js/dashboard.js - Student Dashboard Controller
  * ==============================================================================
- * Retrieves and renders:
- * 1. Student Name, Student ID, and Class Section
- * 2. Today's published quiz and attempt status
- * 3. Total accumulated quiz marks & total possible marks
- * 4. Number of quizzes attempted vs available
- * 5. Recent quiz results breakdown
- * 6. Logout control
+ * 1. Identity header and headline stats
+ * 2. Open quizzes across every enrolled course (start, or see submitted score)
+ * 3. Course cards with running semester marks, plus "join course by code"
+ * 4. Five most recent results
  */
 
 import { getSupabase, showToast } from './supabase.js';
-import { requireAuth, signOut } from './auth.js';
+import { requireAuth } from './auth.js';
+import { loadStudentData, overallAverage } from './student-data.js';
+import {
+  escapeHtml, fmtNum, fmtPct, fmtDate, fmtDateTime, classLabel, percentOf, pctBadgeClass,
+  isQuizOpen, isScoreVisible, emptyState, setBusy, friendlyError, ICONS
+} from './utils.js';
 
 let currentUser = null;
 
 async function initStudentDashboard() {
-  // Ensure the user is authenticated as a student
   currentUser = await requireAuth('student');
   if (!currentUser) return;
 
-  // 1. Render Student Identity
-  renderStudentProfile(currentUser);
+  document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = ICONS[el.dataset.icon]; });
+  document.getElementById('student-name').textContent = currentUser.full_name || 'Student';
+  document.getElementById('student-meta').textContent = [
+    currentUser.student_id && `Roll No: ${currentUser.student_id}`,
+    currentUser.section && `Section: ${currentUser.section}`,
+    currentUser.email
+  ].filter(Boolean).join('  ·  ');
 
-  // 2. Setup Logout Handler
-  document.getElementById('btn-student-logout')?.addEventListener('click', signOut);
+  document.getElementById('join-form').addEventListener('submit', handleJoin);
 
-  // 3. Load Live Quiz Data and Stats from Supabase
-  await loadDashboardData();
+  await loadDashboard();
 }
 
-/**
- * Populates student identity header
- */
-function renderStudentProfile(profile) {
-  const nameElem = document.getElementById('student-name');
-  const idElem = document.getElementById('student-id');
-  const sectionElem = document.getElementById('student-section');
-  const emailElem = document.getElementById('student-email');
-
-  if (nameElem) nameElem.textContent = profile.full_name || 'Student';
-  if (idElem) idElem.textContent = profile.student_id || 'Not Assigned';
-  if (sectionElem) sectionElem.textContent = profile.section || 'General Section';
-  if (emailElem) emailElem.textContent = profile.email || '';
-}
-
-/**
- * Retrieves today's quiz, student scores, attempt history, and cumulative metrics
- */
-async function loadDashboardData() {
-  const supabase = getSupabase();
-  if (!supabase) return;
-
+async function loadDashboard() {
   try {
-    // --------------------------------------------------------------------------
-    // A. FETCH ALL PUBLISHED/CLOSED QUIZZES (Available Quizzes Count)
-    // --------------------------------------------------------------------------
-    const { data: allAvailableQuizzes, error: availErr } = await supabase
-      .from('quizzes')
-      .select('id, class_number, title, scheduled_date, status')
-      .in('status', ['published', 'closed'])
-      .order('class_number', { ascending: true });
-
-    if (availErr) throw availErr;
-    const totalAvailableCount = allAvailableQuizzes ? allAvailableQuizzes.length : 0;
-
-    // --------------------------------------------------------------------------
-    // B. FETCH CURRENT STUDENT'S ATTEMPTS (Enforced by RLS to own data only)
-    // --------------------------------------------------------------------------
-    const { data: attempts, error: attErr } = await supabase
-      .from('quiz_attempts')
-      .select(`
-        id,
-        quiz_id,
-        score,
-        total_marks,
-        submitted_at,
-        quizzes (
-          id,
-          class_number,
-          title,
-          scheduled_date,
-          status
-        )
-      `)
-      .eq('student_id', currentUser.id)
-      .order('submitted_at', { ascending: false });
-
-    if (attErr) throw attErr;
-
-    // Calculate Cumulative Scores & Attempt Counts
-    let accumulatedScore = 0;
-    let totalPossibleMarks = 0;
-    const attemptedCount = attempts ? attempts.length : 0;
-
-    const attemptsByQuizId = new Map();
-    attempts?.forEach(att => {
-      accumulatedScore += Number(att.score || 0);
-      totalPossibleMarks += Number(att.total_marks || 0);
-      attemptsByQuizId.set(att.quiz_id, att);
-    });
-
-    // --------------------------------------------------------------------------
-    // C. UPDATE SCORE & PARTICIPATION METRICS
-    // --------------------------------------------------------------------------
-    const totalScoreDisplay = document.getElementById('stat-total-score');
-    const attemptsCountDisplay = document.getElementById('stat-attempts-count');
-    const accuracyDisplay = document.getElementById('stat-accuracy-rate');
-
-    if (totalScoreDisplay) {
-      totalScoreDisplay.textContent = `${accumulatedScore.toFixed(1)} / ${totalPossibleMarks.toFixed(1)}`;
-    }
-
-    if (attemptsCountDisplay) {
-      attemptsCountDisplay.textContent = `${attemptedCount} / ${totalAvailableCount}`;
-    }
-
-    if (accuracyDisplay) {
-      const accuracyPct = totalPossibleMarks > 0 
-        ? ((accumulatedScore / totalPossibleMarks) * 100).toFixed(1) 
-        : '0.0';
-      accuracyDisplay.textContent = `${accuracyPct}%`;
-    }
-
-    // --------------------------------------------------------------------------
-    // D. FETCH & RENDER TODAY'S ACTIVE QUIZ
-    // --------------------------------------------------------------------------
-    await renderTodayQuiz(attemptsByQuizId);
-
-    // --------------------------------------------------------------------------
-    // E. RENDER RECENT QUIZ RESULTS
-    // --------------------------------------------------------------------------
-    renderRecentResults(attempts);
-
+    const data = await loadStudentData(currentUser.id);
+    renderStats(data);
+    renderOpenQuizzes(data);
+    renderCourses(data);
+    renderRecentResults(data);
   } catch (err) {
-    console.error('Error loading dashboard data:', err);
-    showToast('Failed to load dashboard metrics: ' + err.message, 'danger');
+    console.error('Error loading dashboard:', err);
+    showToast('Could not load your dashboard: ' + friendlyError(err), 'danger');
   }
 }
 
-/**
- * Detects today's published quiz and shows either:
- * - [Start Quiz] (if not yet attempted)
- * - [Completed] Score: X / Y (if already submitted)
- * - Friendly message (if no quiz is published)
- */
-async function renderTodayQuiz(attemptsByQuizId) {
-  const supabase = getSupabase();
-  const container = document.getElementById('today-quiz-card-container');
-  if (!supabase || !container) return;
+function renderStats({ courses, summaries }) {
+  let attempted = 0;
+  let counted = 0;
+  summaries.forEach(s => { attempted += s.attempted; counted += s.counted; });
+  const avg = overallAverage(summaries);
 
-  try {
-    // Look for currently active published quiz
-    const { data: publishedQuizzes, error: pubErr } = await supabase
-      .from('quizzes')
-      .select('id, class_number, title, description, scheduled_date, time_limit_minutes, status')
-      .eq('status', 'published')
-      .order('scheduled_date', { ascending: false })
-      .order('class_number', { ascending: false })
-      .limit(1);
-
-    if (pubErr) throw pubErr;
-
-    if (!publishedQuizzes || publishedQuizzes.length === 0) {
-      container.innerHTML = `
-        <div class="card" style="border-left: 4px solid var(--info); background: var(--bg-card); padding: 1.5rem;">
-          <div style="display: flex; gap: 1rem; align-items: center;">
-            <div class="empty-icon" style="margin: 0; width: 48px; height: 48px; flex-shrink: 0;">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-              </svg>
-            </div>
-            <div>
-              <h3 style="margin-bottom: 0.25rem;">No Quiz Published Today</h3>
-              <p style="margin: 0; color: var(--text-muted); font-size: 0.95rem;">
-                There is no active quiz scheduled right now. Check back during or immediately after your lecture!
-              </p>
-            </div>
-          </div>
-        </div>
-      `;
-      return;
-    }
-
-    const todayQuiz = publishedQuizzes[0];
-
-    // Count questions and compute total marks for this quiz safely
-    let qList = [];
-    const sqRes = await supabase
-      .from('student_questions')
-      .select('id, marks')
-      .eq('quiz_id', todayQuiz.id);
-
-    if (sqRes.data && sqRes.data.length > 0) {
-      qList = sqRes.data;
-    } else {
-      const qRes = await supabase
-        .from('questions')
-        .select('id, marks')
-        .eq('quiz_id', todayQuiz.id);
-      qList = qRes.data || [];
-    }
-
-    const questionCount = qList.length;
-    let quizTotalMarks = 0;
-    qList.forEach(q => quizTotalMarks += Number(q.marks || 1.0));
-
-    // Check if this student has already submitted an attempt
-    const studentAttempt = attemptsByQuizId.get(todayQuiz.id);
-
-    if (studentAttempt) {
-      // ------------------------------------------------------------------------
-      // ALREADY ATTEMPTED STATE
-      // ------------------------------------------------------------------------
-      const pct = studentAttempt.total_marks > 0 
-        ? Math.round((studentAttempt.score / studentAttempt.total_marks) * 100) 
-        : 0;
-
-      container.innerHTML = `
-        <div class="card" style="border: 1px solid var(--success-border); background: var(--bg-card); padding: 1.75rem;">
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1.25rem;">
-            <div>
-              <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem;">
-                <span class="badge badge-published">Completed</span>
-                <span class="badge badge-primary">Class ${String(todayQuiz.class_number).padStart(2, '0')}</span>
-                <span style="font-size: 0.85rem; color: var(--text-muted);">${todayQuiz.scheduled_date}</span>
-              </div>
-              <h2 style="font-size: 1.5rem; margin-bottom: 0.35rem;">${todayQuiz.title}</h2>
-              <div style="font-size: 0.95rem; color: var(--text-secondary);">
-                ${questionCount} questions &bull; ${quizTotalMarks.toFixed(1)} marks total
-              </div>
-            </div>
-
-            <div style="text-align: right; min-width: 180px;">
-              <div style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; margin-bottom: 0.25rem;">Your Score</div>
-              <div style="font-family: var(--font-heading); font-size: 2rem; font-weight: 800; color: var(--success); line-height: 1;">
-                ${Number(studentAttempt.score).toFixed(1)} <span style="font-size: 1rem; color: var(--text-muted);">/ ${Number(studentAttempt.total_marks).toFixed(1)}</span>
-              </div>
-              <div style="margin-top: 0.5rem; display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem;">
-                <span class="badge badge-published">${pct}% Accuracy</span>
-                <a href="results.html" class="btn btn-outline btn-sm" style="font-size: 0.8rem; padding: 0.3rem 0.75rem;">
-                  Review Answers &rarr;
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-    } else {
-      // ------------------------------------------------------------------------
-      // AVAILABLE TO START STATE
-      // ------------------------------------------------------------------------
-      const timeInfo = todayQuiz.time_limit_minutes 
-        ? `${todayQuiz.time_limit_minutes} min limit` 
-        : `Untimed`;
-
-      container.innerHTML = `
-        <div class="card hover-lift" style="border: 2px solid var(--primary); background: radial-gradient(circle at top right, rgba(79, 70, 229, 0.08), var(--bg-card)); padding: 2rem;">
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1.5rem;">
-            <div style="flex: 1; min-width: 280px;">
-              <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem;">
-                <span class="badge badge-warning">Available Now</span>
-                <span class="badge badge-primary">Class ${String(todayQuiz.class_number).padStart(2, '0')}</span>
-                <span style="font-size: 0.85rem; color: var(--text-muted);">${todayQuiz.scheduled_date}</span>
-              </div>
-
-              <h2 style="font-size: 1.65rem; margin-bottom: 0.5rem;">
-                Class ${todayQuiz.class_number} &mdash; ${todayQuiz.title}
-              </h2>
-
-              <p style="color: var(--text-secondary); margin-bottom: 1rem; max-width: 600px;">
-                ${todayQuiz.description || 'Test your knowledge on today\'s lecture topics. One attempt allowed.'}
-              </p>
-
-              <div style="display: flex; gap: 1.5rem; font-size: 0.9rem; color: var(--text-muted); font-weight: 500; flex-wrap: wrap;">
-                <span><strong>${questionCount}</strong> questions</span>
-                <span><strong>${quizTotalMarks.toFixed(1)}</strong> marks</span>
-                <span>${timeInfo}</span>
-                <span>1 Attempt Only</span>
-              </div>
-            </div>
-
-            <div>
-              <a href="quiz.html?id=${todayQuiz.id}" class="btn btn-primary btn-lg" style="padding: 1rem 2.25rem; font-size: 1.1rem; box-shadow: var(--shadow-sm);">
-                Start Quiz &rarr;
-              </a>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-
-  } catch (err) {
-    console.error('Error rendering today quiz:', err);
-    container.innerHTML = `<div class="alert alert-danger">Error loading quiz: ${err.message}</div>`;
-  }
+  document.getElementById('stat-courses').textContent = courses.filter(c => !c.is_archived).length;
+  document.getElementById('stat-taken').textContent = `${attempted} / ${counted}`;
+  document.getElementById('stat-average').textContent = avg === null ? '–' : fmtPct(avg);
 }
 
-/**
- * Renders the recent quiz results list
- */
-function renderRecentResults(attempts) {
-  const tbody = document.getElementById('recent-results-body');
-  if (!tbody) return;
+function renderOpenQuizzes({ quizzes, courseById, attemptByQuiz }) {
+  const container = document.getElementById('open-quizzes');
+  const open = quizzes
+    .filter(isQuizOpen)
+    .sort((a, b) => Number(attemptByQuiz.has(a.id)) - Number(attemptByQuiz.has(b.id)) ||
+                    String(b.scheduled_date).localeCompare(String(a.scheduled_date)));
 
-  if (!attempts || attempts.length === 0) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="5" class="empty-state" style="padding: 2.5rem 1rem;">
-          <div class="empty-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-            </svg>
-          </div>
-          <div class="empty-title">No Quizzes Attempted Yet</div>
-          <p class="empty-text">Your submitted quiz results and scores will appear here after each lecture.</p>
-        </td>
-      </tr>
-    `;
+  if (open.length === 0) {
+    container.innerHTML = `<div class="card">${emptyState('clock', 'No open quizzes right now',
+      'When your teacher publishes a quiz after class, it will show up here.')}</div>`;
     return;
   }
 
-  tbody.innerHTML = attempts.slice(0, 5).map(att => {
-    const q = att.quizzes;
-    const score = Number(att.score || 0);
-    const total = Number(att.total_marks || 0);
-    const pct = total > 0 ? Math.round((score / total) * 100) : 0;
-    const badgeClass = pct >= 80 ? 'badge-published' : pct >= 50 ? 'badge-warning' : 'badge-closed';
+  container.innerHTML = open.map(quiz => {
+    const course = courseById.get(quiz.course_id);
+    const attempt = attemptByQuiz.get(quiz.id);
+    const meta = [
+      `${quiz.question_count} question${quiz.question_count === 1 ? '' : 's'}`,
+      `${fmtNum(quiz.total_marks)} marks`,
+      quiz.time_limit_minutes ? `${quiz.time_limit_minutes} min limit` : 'Untimed',
+      quiz.closes_at ? `Closes ${fmtDateTime(quiz.closes_at)}` : null
+    ].filter(Boolean);
+
+    let action;
+    if (!attempt) {
+      action = `<a href="quiz.html?id=${quiz.id}" class="btn btn-primary">Start Quiz &rarr;</a>`;
+    } else if (isScoreVisible(quiz)) {
+      const pct = percentOf(Number(attempt.score), Number(attempt.total_marks));
+      action = `
+        <div style="text-align: right;">
+          <div class="small muted">Your score</div>
+          <div class="stat-value text-success">${fmtNum(attempt.score)} <span class="small muted">/ ${fmtNum(attempt.total_marks)}</span></div>
+          <span class="badge ${pctBadgeClass(pct)}">${fmtPct(pct, 0)}</span>
+        </div>`;
+    } else {
+      action = `<span class="badge badge-published">Submitted · score after the quiz closes</span>`;
+    }
 
     return `
+      <div class="card quiz-tile ${attempt ? 'is-done' : ''}">
+        <div style="flex: 1; min-width: 240px;">
+          <div class="toolbar" style="gap: 0.5rem;">
+            <span class="badge badge-primary">${escapeHtml(course?.code || '')}</span>
+            <span class="badge ${attempt ? 'badge-published' : 'badge-warning'}">${attempt ? 'Completed' : 'Available now'}</span>
+            <span class="small muted">${classLabel(quiz.class_number)} · ${fmtDate(quiz.scheduled_date)}</span>
+          </div>
+          <h3 class="quiz-tile-title">${escapeHtml(quiz.title)}</h3>
+          ${quiz.description ? `<p class="small" style="margin: 0.25rem 0 0;">${escapeHtml(quiz.description)}</p>` : ''}
+          <div class="quiz-tile-meta">${meta.map(m => `<span>${escapeHtml(m)}</span>`).join('')}</div>
+        </div>
+        <div>${action}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderCourses({ courses, summaries }) {
+  const grid = document.getElementById('courses-grid');
+
+  if (courses.length === 0) {
+    grid.innerHTML = `<div class="card" style="grid-column: 1 / -1;">${emptyState('key', 'Join your first course',
+      'Ask your teacher for the course code, type it in the box above and press "Join Course".')}</div>`;
+    return;
+  }
+
+  grid.innerHTML = courses.map(course => {
+    const s = summaries.get(course.id);
+    const hasMarks = s.counted > 0;
+    const weighted = s.weighted !== null && hasMarks
+      ? `${fmtNum(s.weighted)} / ${fmtNum(course.final_weight)}`
+      : null;
+
+    return `
+      <div class="card course-card ${course.is_archived ? 'is-archived' : ''}">
+        <div>
+          <div class="course-card-code">${escapeHtml(course.code)}${course.is_archived ? ' · Archived' : ''}</div>
+          <h3 class="course-card-name">${escapeHtml(course.name)}</h3>
+          <div class="course-card-meta">
+            ${escapeHtml([course.teacher?.full_name, course.section && `Section ${course.section}`, course.term].filter(Boolean).join(' · '))}
+          </div>
+        </div>
+        <div class="mini-stats">
+          <div>
+            <div class="mini-stat-value">${s.attempted}/${s.counted}</div>
+            <div class="mini-stat-label">Taken</div>
+          </div>
+          <div>
+            <div class="mini-stat-value">${hasMarks ? fmtPct(s.percentage, 0) : '–'}</div>
+            <div class="mini-stat-label">Score</div>
+          </div>
+          <div>
+            <div class="mini-stat-value">${weighted || `${fmtNum(s.earned)}/${fmtNum(s.possible)}`}</div>
+            <div class="mini-stat-label">${weighted ? 'Final marks' : 'Marks'}</div>
+          </div>
+        </div>
+        <div class="card-actions">
+          <a href="profile.html#course-${course.id}" class="btn btn-secondary btn-sm">Semester report</a>
+          <a href="results.html?course=${course.id}" class="btn btn-outline btn-sm">Quiz results</a>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderRecentResults({ attempts, quizById, courseById }) {
+  const tbody = document.getElementById('recent-results-body');
+  const recent = attempts.filter(a => quizById.has(a.quiz_id)).slice(0, 5);
+
+  if (recent.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5">${emptyState('book', 'No quizzes taken yet', 'Your scores will appear here after you submit a quiz.')}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = recent.map(att => {
+    const quiz = quizById.get(att.quiz_id);
+    const course = courseById.get(quiz.course_id);
+    const visible = isScoreVisible(quiz);
+    const pct = percentOf(Number(att.score), Number(att.total_marks));
+    return `
       <tr>
-        <td>
-          <span class="badge badge-primary">Class ${String(q?.class_number || 0).padStart(2, '0')}</span>
-        </td>
-        <td>
-          <strong>${q?.title || 'Daily Lecture Quiz'}</strong>
-        </td>
-        <td>
-          <span style="color: var(--text-muted); font-size: 0.85rem;">
-            ${q?.scheduled_date || new Date(att.submitted_at).toLocaleDateString()}
-          </span>
-        </td>
-        <td>
-          <strong style="color: var(--text-primary); font-size: 1rem;">
-            ${score.toFixed(1)} / ${total.toFixed(1)}
-          </strong>
-          <span class="badge ${badgeClass}" style="margin-left: 0.5rem;">${pct}%</span>
-        </td>
-        <td>
-          <span class="badge badge-published">Completed</span>
-        </td>
+        <td><span class="badge badge-primary">${escapeHtml(course?.code || '')}</span></td>
+        <td><strong>${classLabel(quiz.class_number)}</strong> · ${escapeHtml(quiz.title)}</td>
+        <td class="small nowrap hide-sm">${fmtDateTime(att.submitted_at)}</td>
+        <td class="nowrap">${visible
+          ? `<strong class="strong">${fmtNum(att.score)} / ${fmtNum(att.total_marks)}</strong> <span class="badge ${pctBadgeClass(pct)}">${fmtPct(pct, 0)}</span>`
+          : '<span class="small muted">After quiz closes</span>'}</td>
+        <td><a href="results.html?attempt=${att.id}" class="btn btn-outline btn-sm">Review</a></td>
       </tr>
     `;
   }).join('');
+}
+
+async function handleJoin(e) {
+  e.preventDefault();
+  const input = document.getElementById('join-code');
+  const btn = document.getElementById('btn-join');
+  const code = input.value.trim();
+  if (!code) {
+    input.focus();
+    showToast('Enter the course code your teacher gave you.', 'warning');
+    return;
+  }
+
+  setBusy(btn, true, 'Joining...');
+  try {
+    const { data, error } = await getSupabase().rpc('join_course', { p_code: code });
+    if (error) throw error;
+    if (!data?.success) {
+      showToast(data?.error || 'Could not join that course.', 'danger');
+      return;
+    }
+    input.value = '';
+    showToast(data.already_enrolled
+      ? `You're already in ${data.course_code}.`
+      : `Joined ${data.course_code} · ${data.course_name}!`, 'success');
+    await loadDashboard();
+  } catch (err) {
+    showToast(friendlyError(err), 'danger');
+  } finally {
+    setBusy(btn, false);
+  }
 }
 
 document.addEventListener('DOMContentLoaded', initStudentDashboard);

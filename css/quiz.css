@@ -262,6 +262,7 @@
   border: 1px solid var(--border-color);
   background: var(--bg-card);
   color: var(--text-secondary);
+  font-family: var(--font-body);
   font-weight: 600;
   font-size: 0.85rem;
   display: flex;
