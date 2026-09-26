@@ -122,6 +122,10 @@ AA contrast) and the Plus Jakarta Sans font. All color, spacing and radius value
 [css/main.css](css/main.css). The design also includes accessibility basics: a skip link, visible focus,
 reduced-motion support, inline form errors, and touch targets of at least 24 px.
 
+The Quizora logo files live in [assets/brand/](assets/brand/): the wordmark for the navbar, the full logo
+with the "Learn . Quiz . Progress" tagline for the landing page and sign-in cards, the Q mark for the favicon,
+home-screen app icons (via [manifest.webmanifest](manifest.webmanifest)) and a link-preview image.
+
 ## Security
 
 - Grading runs inside PostgreSQL (`submit_quiz`). Students read questions through a view with no

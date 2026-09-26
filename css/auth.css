@@ -45,6 +45,15 @@
   fill: none;
 }
 
+/* Full logo with tagline at the top of the sign-in / sign-up / reset cards */
+.auth-brand-lockup {
+  display: block;
+  width: 240px;
+  max-width: 80%;
+  height: auto;
+  margin: 0 auto 1.1rem;
+}
+
 .auth-brand-mark {
   display: block;
   width: 56px;

@@ -14,6 +14,20 @@
 
 ---
 
+## Logo
+
+| File (assets/brand/) | Use |
+|------|-----|
+| `quizora-logo.svg` | Wordmark only: navbar on every page (34px high) |
+| `quizora-logo-tagline.svg` | Full logo with "Learn . Quiz . Progress": landing hero (320px wide, 260px on phones), sign-in / sign-up / reset cards (240px). Never narrower than 220px, or the tagline stops being legible |
+| `quizora-mark.svg`, `/favicon.svg` | The Q on its own: browser tab |
+| `apple-touch-icon.png` (180), `icon-192.png`, `icon-512.png` | Phone home-screen / installed-app icons (see `/manifest.webmanifest`) |
+| `og-image.png` (1200×630) | Link previews when the site or a sign-up link is shared |
+
+- Logo colours belong to the logo only: Q gradient `#016DFC → #6836E9`, navy wordmark, purple sparkle, tagline `#262FE5`. The UI keeps the teal tokens below.
+- Always place the logo on white or `--bg-primary`; never on the dark teal CTA band.
+- The PNGs are rendered from the SVGs. Regenerate them if the logo changes.
+
 ## Style
 
 **Minimalism** — clean, functional, white space, clear type hierarchy, borders over shadows,
