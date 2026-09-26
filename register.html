@@ -3,17 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0F766E">
   <title>Create Account | DailyClassQuiz</title>
   <meta name="description" content="Create a student or teacher account for daily class quizzes.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
 
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/auth.css">
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to main content</a>
   <header class="app-navbar">
     <div class="app-container navbar-inner">
       <a href="index.html" class="navbar-brand">
@@ -31,7 +36,7 @@
     </div>
   </header>
 
-  <main class="main-content">
+  <main id="main" class="main-content" tabindex="-1">
     <div class="auth-wrapper">
       <div class="auth-card">
 
@@ -109,7 +114,7 @@
   <script type="module">
     import { registerUser, getUserProfile, homeUrlFor } from './js/auth.js';
     import { showToast } from './js/supabase.js';
-    import { setBusy } from './js/utils.js';
+    import { setBusy, showFieldError, clearFieldErrors } from './js/utils.js';
 
     getUserProfile().then(profile => {
       if (profile) window.location.replace(homeUrlFor(profile));
@@ -149,6 +154,7 @@
       e.preventDefault();
       const submitBtn = document.getElementById('btn-submit-register');
       alertBox.style.display = 'none';
+      clearFieldErrors(form);
 
       setBusy(submitBtn, true, 'Creating account...');
       const result = await registerUser({
@@ -162,10 +168,19 @@
       });
 
       if (!result.success) {
+        setBusy(submitBtn, false);
+        const fieldId = {
+          fullName: 'reg-fullname', studentId: 'reg-student-id', email: 'reg-email',
+          password: 'reg-password', facultyCode: 'reg-faculty-code'
+        }[result.field];
+        if (fieldId) {
+          showFieldError(document.getElementById(fieldId), result.error);
+          return;
+        }
         alertBox.className = 'alert alert-danger';
         alertBox.textContent = result.error;
         alertBox.style.display = 'block';
-        setBusy(submitBtn, false);
+        alertBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
 
@@ -175,6 +190,7 @@
         alertBox.className = 'alert alert-success';
         alertBox.textContent = 'Account created! We sent you a confirmation email — click the link in it, then sign in.';
         alertBox.style.display = 'block';
+        alertBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
 

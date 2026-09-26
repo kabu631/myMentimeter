@@ -9,7 +9,7 @@
 
 import { getSupabase, showToast } from './supabase.js';
 import { guardAdminPage, loadTeacherCourses, pickActiveCourseId, rememberActiveCourse, noCoursesHtml } from './admin-service.js';
-import { escapeHtml, courseLabel, todayIso, toLocalInput, fromLocalInput, fmtNum, friendlyError } from './utils.js';
+import { escapeHtml, courseLabel, todayIso, toLocalInput, fromLocalInput, fmtNum, friendlyError, ICONS } from './utils.js';
 
 const OPTION_IDS = ['A', 'B', 'C', 'D', 'E', 'F'];
 const $ = (id) => document.getElementById(id);
@@ -149,9 +149,9 @@ function renderQuestions() {
           <label class="small muted" for="marks-${idx}">Marks</label>
           <input id="marks-${idx}" type="number" step="0.5" min="0.5" max="99" class="form-control q-marks" style="width: 80px; padding: 0.35rem 0.6rem;" value="${q.marks}" ${dis}>
           ${isLocked ? '' : `
-            <button type="button" class="icon-btn" data-move="-1" title="Move up" aria-label="Move up" ${idx === 0 ? 'disabled' : ''}>&uarr;</button>
-            <button type="button" class="icon-btn" data-move="1" title="Move down" aria-label="Move down" ${idx === questions.length - 1 ? 'disabled' : ''}>&darr;</button>
-            <button type="button" class="icon-btn" data-duplicate title="Duplicate" aria-label="Duplicate">⧉</button>
+            <button type="button" class="icon-btn" data-move="-1" title="Move up" aria-label="Move question ${idx + 1} up" ${idx === 0 ? 'disabled' : ''}>${ICONS.arrowUp}</button>
+            <button type="button" class="icon-btn" data-move="1" title="Move down" aria-label="Move question ${idx + 1} down" ${idx === questions.length - 1 ? 'disabled' : ''}>${ICONS.arrowDown}</button>
+            <button type="button" class="icon-btn" data-duplicate title="Duplicate" aria-label="Duplicate question ${idx + 1}">${ICONS.duplicate}</button>
             ${questions.length > 1 ? '<button type="button" class="btn btn-danger-outline btn-sm" data-delete>Delete</button>' : ''}
           `}
         </div>
@@ -172,7 +172,7 @@ function renderQuestions() {
                 <span>${opt.id}</span>
               </label>
               <input type="text" class="form-control opt-input" data-opt="${oIdx}" placeholder="Option ${opt.id}" value="${escapeHtml(opt.text)}" ${isTF || isLocked ? 'disabled' : ''}>
-              ${!isTF && !isLocked && q.options.length > 2 ? `<button type="button" class="icon-btn" data-remove-opt="${oIdx}" title="Remove option" aria-label="Remove option ${opt.id}">&times;</button>` : ''}
+              ${!isTF && !isLocked && q.options.length > 2 ? `<button type="button" class="icon-btn" data-remove-opt="${oIdx}" title="Remove option" aria-label="Remove option ${opt.id}">${ICONS.x}</button>` : ''}
             </div>
           `).join('')}
         </div>

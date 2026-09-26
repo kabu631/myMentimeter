@@ -3,16 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0F766E">
   <title>My Profile &amp; Semester Report | DailyClassQuiz</title>
   <meta name="description" content="Your profile and semester quiz marks for every course.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
 
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/components.css">
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to main content</a>
   <header class="app-navbar">
     <div class="app-container navbar-inner">
       <a href="dashboard.html" class="navbar-brand">
@@ -28,7 +33,7 @@
     </div>
   </header>
 
-  <main class="main-content">
+  <main id="main" class="main-content" tabindex="-1">
     <div class="app-container">
 
       <section class="page-header">

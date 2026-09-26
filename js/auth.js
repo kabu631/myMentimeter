@@ -36,19 +36,19 @@ export async function registerUser({ accountType, fullName, studentId, section, 
   const trimmedCode = (facultyCode || '').trim();
 
   if (trimmedName.length < 2) {
-    return { success: false, error: 'Please enter your full name (at least 2 characters).' };
+    return { success: false, field: 'fullName', error: 'Please enter your full name (at least 2 characters).' };
   }
   if (!isTeacher && trimmedId.length < 2) {
-    return { success: false, error: 'Please enter your college roll / registration number.' };
+    return { success: false, field: 'studentId', error: 'Please enter your college roll / registration number.' };
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-    return { success: false, error: 'Please enter a valid email address.' };
+    return { success: false, field: 'email', error: 'Please enter a valid email address, like name@college.edu.' };
   }
   if (!password || password.length < 6) {
-    return { success: false, error: 'Password must be at least 6 characters long.' };
+    return { success: false, field: 'password', error: 'Password must be at least 6 characters long.' };
   }
   if (isTeacher && !trimmedCode) {
-    return { success: false, error: 'Please enter the faculty sign-up code from your administrator.' };
+    return { success: false, field: 'facultyCode', error: 'Please enter the faculty sign-up code from your administrator.' };
   }
 
   try {
@@ -57,13 +57,13 @@ export async function registerUser({ accountType, fullName, studentId, section, 
       const { data: codeOk, error } = await supabase.rpc('verify_faculty_code', { p_code: trimmedCode });
       if (error) throw error;
       if (!codeOk) {
-        return { success: false, error: 'That faculty sign-up code is not valid. Check it with your administrator.' };
+        return { success: false, field: 'facultyCode', error: 'That faculty sign-up code is not valid. Check it with your administrator.' };
       }
     } else {
       const { data: idFree, error } = await supabase.rpc('is_student_id_available', { p_student_id: trimmedId });
       if (error) throw error;
       if (!idFree) {
-        return { success: false, error: `Roll number "${trimmedId}" is already registered. Sign in instead, or check the number.` };
+        return { success: false, field: 'studentId', error: `Roll number "${trimmedId}" is already registered. Sign in instead, or check the number.` };
       }
     }
 
@@ -82,7 +82,7 @@ export async function registerUser({ accountType, fullName, studentId, section, 
 
     if (authErr) {
       if (authErr.message?.toLowerCase().includes('already registered')) {
-        return { success: false, error: 'An account with this email already exists. Please sign in instead.' };
+        return { success: false, field: 'email', error: 'An account with this email already exists. Please sign in instead.' };
       }
       return { success: false, error: friendlyError(authErr) };
     }
@@ -111,7 +111,7 @@ export async function loginUser(email, password) {
 
   const trimmedEmail = (email || '').trim().toLowerCase();
   if (!trimmedEmail || !password) {
-    return { success: false, error: 'Please enter both your email address and password.' };
+    return { success: false, field: !trimmedEmail ? 'email' : 'password', error: !trimmedEmail ? 'Please enter your email address.' : 'Please enter your password.' };
   }
 
   try {

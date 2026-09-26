@@ -91,6 +91,15 @@ to set a temporary one immediately.
 
 ---
 
+## Design
+
+The look and feel follows [design-system/dailyclassquiz/MASTER.md](design-system/dailyclassquiz/MASTER.md),
+generated with the [UI/UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) skill and then
+checked by hand. It uses the Minimalism style with a teal and orange palette (every text color meets WCAG
+AA contrast) and the Plus Jakarta Sans font. All color, spacing and radius values are defined as variables in
+[css/main.css](css/main.css). The design also includes accessibility basics: a skip link, visible focus,
+reduced-motion support, inline form errors, and touch targets of at least 24 px.
+
 ## Security
 
 - Grading runs inside PostgreSQL (`submit_quiz`). Students read questions through a view with no
@@ -122,7 +131,8 @@ admin/create-quiz.html Teacher: quiz editor
 admin/students.html   Teacher: roster, invite message, remove students
 admin/results.html    Teacher: semester gradebook, student reports, CSV export
 js/                   One module per page plus shared auth, utils, student-data, review, admin-service
-css/                  Design tokens (main), components, quiz, admin, auth
+css/                  Design tokens (main), components, quiz, admin, auth, landing
+design-system/        Design system master file (source of truth for the UI)
 sql/setup.sql         Complete database: tables, RLS, RPCs (run this)
 sql/make_admin.sql    Change an account's role
 sql/reset_student_password.sql  Set a temporary password

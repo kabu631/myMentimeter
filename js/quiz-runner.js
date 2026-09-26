@@ -371,6 +371,10 @@ function showCompletionCard(attempt) {
     const badge = $('completion-accuracy');
     badge.textContent = fmtPct(pct, 0);
     badge.className = `badge ${pctBadgeClass(pct)}`;
+    $('completion-message').textContent = pct >= 90 ? 'Excellent work!'
+      : pct >= 70 ? 'Great job!'
+      : pct >= 50 ? 'Good effort!'
+      : 'Keep practising — review the answers once the quiz closes.';
   } else {
     $('completion-score-box').classList.add('hidden');
     $('completion-hidden-note').classList.remove('hidden');

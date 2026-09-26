@@ -154,6 +154,7 @@ function renderCourses({ courses, summaries }) {
             <div class="mini-stat-label">${weighted ? 'Final marks' : 'Marks'}</div>
           </div>
         </div>
+        ${courseProgress(s)}
         <div class="card-actions">
           <a href="profile.html#course-${course.id}" class="btn btn-secondary btn-sm">Semester report</a>
           <a href="results.html?course=${course.id}" class="btn btn-outline btn-sm">Quiz results</a>
@@ -161,6 +162,19 @@ function renderCourses({ courses, summaries }) {
       </div>
     `;
   }).join('');
+}
+
+/** "Quizzes taken" progress bar; turns green when the student has taken every held quiz. */
+function courseProgress(s) {
+  if (s.counted === 0) return '';
+  const pct = Math.round((s.attempted / s.counted) * 100);
+  return `
+    <div class="course-progress">
+      <div class="course-progress-label"><span>Participation</span><span>${pct}%</span></div>
+      <div class="progress-container" role="progressbar" aria-label="Quizzes taken" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-fill ${pct === 100 ? 'is-complete' : ''}" style="width: ${pct}%;"></div>
+      </div>
+    </div>`;
 }
 
 function renderRecentResults({ attempts, quizById, courseById }) {

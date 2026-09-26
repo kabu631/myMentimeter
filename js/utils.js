@@ -207,6 +207,10 @@ export function friendlyError(err) {
   if (/failed to fetch|networkerror|load failed|fetch failed/i.test(msg)) {
     return 'Cannot reach the server. Check your internet connection — if it keeps happening, the Supabase project may be paused.';
   }
+  // Missing table/function: the database hasn't been upgraded with sql/setup.sql yet
+  if (err?.code === 'PGRST202' || err?.code === 'PGRST205' || /in the schema cache/i.test(msg)) {
+    return 'The database is not set up for this version of the app yet. Ask your administrator to run sql/setup.sql in Supabase.';
+  }
   return msg;
 }
 
@@ -225,6 +229,44 @@ export async function copyText(text) {
     area.remove();
     return ok;
   }
+}
+
+/**
+ * Inline form errors (shown under the field, linked via aria-describedby).
+ * showFieldError(input, message) marks the field invalid and focuses it;
+ * clearFieldErrors(form) resets every field in the form.
+ */
+export function showFieldError(input, message) {
+  if (!input) return;
+  const id = `${input.id}-error`;
+  let el = document.getElementById(id);
+  if (!el) {
+    el = document.createElement('span');
+    el.id = id;
+    el.className = 'field-error';
+    el.setAttribute('role', 'alert');
+    input.insertAdjacentElement('afterend', el);
+  }
+  el.textContent = message;
+  input.setAttribute('aria-invalid', 'true');
+  const described = new Set((input.getAttribute('aria-describedby') || '').split(' ').filter(Boolean));
+  described.add(id);
+  input.setAttribute('aria-describedby', [...described].join(' '));
+  input.focus();
+  input.addEventListener('input', () => clearFieldError(input), { once: true });
+}
+
+export function clearFieldError(input) {
+  const el = document.getElementById(`${input.id}-error`);
+  if (el) el.remove();
+  input.removeAttribute('aria-invalid');
+  const rest = (input.getAttribute('aria-describedby') || '').split(' ').filter(t => t && t !== `${input.id}-error`);
+  if (rest.length) input.setAttribute('aria-describedby', rest.join(' '));
+  else input.removeAttribute('aria-describedby');
+}
+
+export function clearFieldErrors(form) {
+  form.querySelectorAll('[aria-invalid="true"]').forEach(clearFieldError);
 }
 
 /** Disable a button and swap its label while an async action runs. */
@@ -255,6 +297,9 @@ export const ICONS = {
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
   user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+  arrowUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>',
+  arrowDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>',
+  duplicate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16V5a1 1 0 0 1 1-1h11"/></svg>',
   key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>'
 };
 
