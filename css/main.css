@@ -309,16 +309,9 @@ main.main-content:focus { outline: none; }
 
 .footer-inner {
   display: flex;
-  flex-direction: column;
+  justify-content: center;
   align-items: center;
-  gap: 0.35rem;
-}
-
-@media (min-width: 640px) {
-  .footer-inner {
-    flex-direction: row;
-    justify-content: space-between;
-  }
+  text-align: center;
 }
 
 /* Focus: visible 2px ring with offset on every interactive element */
